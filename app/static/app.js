@@ -437,150 +437,29 @@ function renderBudget() {
 ================================ */
 
 function renderEquipment() {
-
-    const items =
-        current.equipment || [];
-
-    const container =
-        $("#equipment");
-
-
+    const items = current.equipment || [];
+    const container = $("#equipment");
     if (!items.length) {
-
-        container.innerHTML = `
-
-            <div class="list-empty">
-
-                <strong>
-                    Keine Ausstattung hinterlegt
-                </strong>
-
-                Für diesen Raum wurden noch
-                keine Geräte erfasst.
-
-            </div>
-        `;
-
+        container.innerHTML = `<div class="list-empty"><strong>Keine Ausstattung hinterlegt</strong>Für diesen Raum wurden noch keine Geräte erfasst.</div>`;
         return;
     }
 
-
-    container.innerHTML = `
-
-        <div class="table-wrap">
-
-            <table>
-
-                <thead>
-
-                    <tr>
-
-                        <th>Gerät</th>
-                        <th>Kategorie</th>
-                        <th>Hersteller</th>
-                        <th>Modell</th>
-                        <th>Größe</th>
-                        <th>Montage</th>
-                        <th>Status</th>
-                        <th></th>
-
-                    </tr>
-
-                </thead>
-
-
-                <tbody>
-
-                    ${items.map(item => `
-
-                        <tr>
-
-                            <td>
-
-                                <div class="primary-text">
-                                    ${esc(item.name)}
-                                </div>
-
-                                ${
-                                    item.serial
-                                        ? `
-                                            <div class="secondary-text">
-                                                S/N ${esc(item.serial)}
-                                            </div>
-                                          `
-                                        : ""
-                                }
-
-                            </td>
-
-
-                            <td>
-                                ${esc(item.category)}
-                            </td>
-
-
-                            <td>
-                                ${esc(item.manufacturer)}
-                            </td>
-
-
-                            <td>
-                                ${esc(item.model)}
-                            </td>
-
-
-                            <td>
-                                ${
-                                    item.size_inches
-                                        ? `${esc(item.size_inches)}"`
-                                        : "–"
-                                }
-                            </td>
-
-
-                            <td>
-                                ${esc(item.mounting)}
-                            </td>
-
-
-                            <td>
-                                ${badge(item.status || "Aktiv")}
-                            </td>
-
-
-                            <td>
-
-                                <div class="actions">
-
-                                    <button
-                                        type="button"
-                                        onclick="editEquipment(${item.id})">
-                                        Bearb.
-                                    </button>
-
-                                    <button
-                                        type="button"
-                                        onclick="deleteItem('equipment', ${item.id})">
-                                        Löschen
-                                    </button>
-
-                                </div>
-
-                            </td>
-
-                        </tr>
-
-                    `).join("")}
-
-                </tbody>
-
-            </table>
-
-        </div>
-
-    `;
+    const byYear = {};
+    items.forEach(item => {
+        const year = item.purchase_date ? String(item.purchase_date).slice(0, 4) : "Ohne Kaufjahr";
+        if (!byYear[year]) byYear[year] = [];
+        byYear[year].push(item);
+    });
+    const rows = Object.keys(byYear).sort().reverse().map(year => `
+        <tr class="equipment-year"><td colspan="8">${esc(year)}</td></tr>
+        ${byYear[year].map(item => `<tr>
+          <td><div class="primary-text">${esc(item.name)}</div>${item.serial ? `<div class="secondary-text">S/N ${esc(item.serial)}</div>` : ""}</td>
+          <td>${esc(item.category)}</td><td>${esc(item.manufacturer)}</td><td>${esc(item.model)}</td>
+          <td>${item.size_inches ? `${esc(item.size_inches)}"` : "–"}</td><td>${esc(item.mounting)}</td><td>${badge(item.status || "Aktiv")}</td>
+          <td><div class="actions"><button type="button" onclick="editEquipment(${item.id})">Bearb.</button><button type="button" onclick="deleteItem('equipment', ${item.id})">Löschen</button></div></td>
+        </tr>`).join("")}`).join("");
+    container.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Gerät</th><th>Kategorie</th><th>Hersteller</th><th>Modell</th><th>Größe</th><th>Montage</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
-
 
 /* ================================
    BOOKING RULES
