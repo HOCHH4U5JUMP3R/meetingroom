@@ -2,6 +2,8 @@
 
 Interne Web-App für die Verwaltung von Meetingräumen, Ausstattung, Buchungsregeln, Modernisierungen und Tickets. Die Daten werden in einer SQLite-Datenbank in einem Docker-Volume gespeichert.
 
+Die Startseite bietet eine durchsuchbare Übersicht aller Standorte und Räume. Ein Klick auf eine Raumkarte öffnet die vollständige Raumakte.
+
 ## Als GitHub Container Registry (GHCR) Paket bereitstellen
 
 Der Workflow [`.github/workflows/publish-ghcr.yml`](.github/workflows/publish-ghcr.yml) baut bei einem Push auf `main`, bei einem `v*`-Tag oder manuell ein Container-Image und veröffentlicht es unter:
