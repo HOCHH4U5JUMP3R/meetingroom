@@ -1,11 +1,11 @@
 from pathlib import Path
 from datetime import date
-from typing import Optional
+from typing import Literal, Optional
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from sqlalchemy import create_engine, String, Integer, Float, Date, Text, ForeignKey, Boolean, select, func
+from sqlalchemy import create_engine, String, Integer, Float, Date, Text, ForeignKey, Boolean, UniqueConstraint, select, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, Session, sessionmaker
 
 BASE = Path(__file__).resolve().parent.parent
@@ -55,6 +55,7 @@ class Equipment(Base):
     mounting: Mapped[str] = mapped_column(String(80), default='')
     status: Mapped[str] = mapped_column(String(50), default='Aktiv')
     purchase_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    purchase_price: Mapped[float] = mapped_column(Float, default=0)
     notes: Mapped[str] = mapped_column(Text, default='')
 
 class BookingRule(Base):
@@ -101,7 +102,31 @@ class Ticket(Base):
     description: Mapped[str] = mapped_column(Text, default='')
     notes: Mapped[str] = mapped_column(Text, default='')
 
+class BudgetSettings(Base):
+    __tablename__ = 'budget_settings'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    overall_budget: Mapped[float] = mapped_column(Float, default=0)
+
+class SiteBudget(Base):
+    __tablename__ = 'site_budgets'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    site: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    budget: Mapped[float] = mapped_column(Float, default=0)
+
+class YearlyBudget(Base):
+    __tablename__ = 'yearly_budgets'
+    __table_args__ = (UniqueConstraint('year', 'site', name='uq_yearly_budget_year_site'),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    year: Mapped[int] = mapped_column(Integer, index=True)
+    site: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    budget: Mapped[float] = mapped_column(Float, default=0)
+
 Base.metadata.create_all(engine)
+# Lightweight migration for existing SQLite installations.
+with engine.begin() as connection:
+    columns = {row[1] for row in connection.exec_driver_sql('PRAGMA table_info(equipment)')}
+    if 'purchase_price' not in columns:
+        connection.exec_driver_sql('ALTER TABLE equipment ADD COLUMN purchase_price FLOAT DEFAULT 0')
 
 app = FastAPI(title='Meetingraumverwaltung', version='1.0.0')
 app.mount('/static', StaticFiles(directory=BASE/'app'/'static'), name='static')
@@ -117,8 +142,14 @@ def dump(obj):
 def model_for(kind):
     return {'rooms':Room,'equipment':Equipment,'rules':BookingRule,'modernizations':Modernization,'tickets':Ticket}[kind]
 
+def schema_for(kind):
+    return {'equipment':EquipmentIn,'rules':RuleIn,'modernizations':ModernizationIn,'tickets':TicketIn}[kind]
+
 @app.get('/')
 def index(): return FileResponse(BASE/'app'/'static'/'index.html')
+
+@app.get('/health')
+def health(): return {'status': 'ok'}
 
 @app.get('/api/rooms')
 def rooms(db:Session=Depends(db)):
@@ -137,6 +168,77 @@ def room_detail(room_id:int, db:Session=Depends(db)):
     data['tickets']=[dump(x) for x in sorted(r.tickets,key=lambda x:x.id,reverse=True)]
     return data
 
+def project_year(project):
+    return project.project_year or (project.start_date.year if project.start_date else None)
+
+def budget_scope_matches(project, year:int, quarter:Optional[int], month:Optional[int]):
+    if project_year(project) != year: return False
+    if month is None and quarter is None: return True
+    if not project.start_date: return False
+    if month is not None: return project.start_date.month == month
+    return (project.start_date.month - 1) // 3 + 1 == quarter
+
+def budget_years(db:Session):
+    current = date.today().year
+    years = set(range(current - 3, current + 4))
+    years.update(item.year for item in db.scalars(select(YearlyBudget)).all())
+    projects = db.scalars(select(Modernization)).all()
+    years.update(item.project_year for item in projects if item.project_year is not None)
+    years.update(item.start_date.year for item in projects if item.start_date is not None)
+    years.update(item.purchase_date.year for item in db.scalars(select(Equipment).where(Equipment.purchase_date.is_not(None))).all())
+    return sorted(year for year in years if year is not None)
+
+@app.get('/api/budget-overview')
+def budget_overview(year:Optional[int]=None, quarter:Optional[int]=None, month:Optional[int]=None, db:Session=Depends(db)):
+    selected_year = year or date.today().year
+    if quarter is not None and quarter not in [1,2,3,4]: raise HTTPException(400, 'Ungültiges Quartal')
+    if month is not None and month not in range(1,13): raise HTTPException(400, 'Ungültiger Monat')
+    configured = {(item.site, item.year): item.budget for item in db.scalars(select(YearlyBudget)).all()}
+    legacy_sites = {item.site: item.budget for item in db.scalars(select(SiteBudget)).all()}
+    totals = {}
+    for room in db.scalars(select(Room)).all():
+        site = room.site or 'Ohne Standort'
+        budget = configured.get((site, selected_year), legacy_sites.get(site, 0) if selected_year == date.today().year else 0)
+        entry = totals.setdefault(site, {'site': site, 'rooms': 0, 'budget': budget, 'planned': 0, 'spent': 0, 'equipment_spent': 0})
+        entry['rooms'] += 1
+        for equipment in room.equipment:
+            if equipment.purchase_date and equipment.purchase_date.year == selected_year and (month is None or equipment.purchase_date.month == month) and (quarter is None or (equipment.purchase_date.month - 1) // 3 + 1 == quarter):
+                entry['equipment_spent'] += equipment.purchase_price or 0
+        for project in room.projects:
+            if budget_scope_matches(project, selected_year, quarter, month):
+                entry['planned'] += project.budget or 0
+                entry['spent'] += project.actual_cost or 0
+    for (site, budget_year), budget in configured.items():
+        if budget_year == selected_year:
+            totals.setdefault(site or 'Ohne Standort', {'site': site or 'Ohne Standort', 'rooms': 0, 'budget': budget, 'planned': 0, 'spent': 0, 'equipment_spent': 0})
+    sites = sorted(totals.values(), key=lambda item: item['site'])
+    for entry in sites: entry['available'] = entry['budget'] - entry['planned'] - entry['equipment_spent']; entry['spent'] += entry['equipment_spent']
+    settings = db.scalar(select(BudgetSettings).limit(1))
+    overall_budget = configured.get((None, selected_year), settings.overall_budget if settings and selected_year == date.today().year else 0)
+    total = {'budget': overall_budget, 'planned': sum(item['planned'] for item in sites), 'spent': sum(item['spent'] for item in sites)}
+    total['available'] = total['budget'] - total['planned'] - sum(item['equipment_spent'] for item in sites)
+    return {'year': selected_year, 'quarter': quarter, 'month': month, 'years': budget_years(db), 'total': total, 'sites': sites}
+
+class BudgetAmountIn(BaseModel):
+    budget: float = 0
+
+@app.put('/api/budget-overview/global')
+def update_overall_budget(payload:BudgetAmountIn, year:int, db:Session=Depends(db)):
+    entry = db.scalar(select(YearlyBudget).where(YearlyBudget.year == year, YearlyBudget.site.is_(None)))
+    if not entry:
+        entry = YearlyBudget(year=year, site=None, budget=payload.budget); db.add(entry)
+    else: entry.budget = payload.budget
+    db.commit(); return {'year': year, 'budget': entry.budget}
+
+@app.put('/api/budget-overview/sites/{site}')
+def update_site_budget(site:str, payload:BudgetAmountIn, year:int, db:Session=Depends(db)):
+    if not site.strip(): raise HTTPException(400, 'Standort darf nicht leer sein')
+    entry = db.scalar(select(YearlyBudget).where(YearlyBudget.year == year, YearlyBudget.site == site))
+    if not entry:
+        entry = YearlyBudget(year=year, site=site, budget=payload.budget); db.add(entry)
+    else: entry.budget = payload.budget
+    db.commit(); return {'site': entry.site, 'year': year, 'budget': entry.budget}
+
 @app.get('/api/dashboard')
 def dashboard(db:Session=Depends(db)):
     rows=db.scalars(select(Modernization)).all()
@@ -152,7 +254,7 @@ def dashboard(db:Session=Depends(db)):
 class RoomIn(BaseModel):
     name:str; site:str=''; building:str=''; floor:str=''; room_number:str=''; length:Optional[float]=None; width:Optional[float]=None; height:Optional[float]=None; seats:Optional[int]=None; specialty:str=''; category:str=''; outlook_resource:str=''; connections:str=''; owner:str=''; host_name:str=''; notes:str=''; status:str='Aktiv'; last_modernization:Optional[date]=None
 class EquipmentIn(BaseModel):
-    name:str; category:str=''; manufacturer:str=''; model:str=''; serial:str=''; size_inches:Optional[float]=None; mounting:str=''; status:str='Aktiv'; purchase_date:Optional[date]=None; notes:str=''
+    name:str; category:Literal['Monitor','VC-System','Mikrofon','Lautsprecher','Zubehör']='Monitor'; manufacturer:str=''; model:str=''; serial:str=''; size_inches:Optional[float]=None; mounting:str=''; status:str='Aktiv'; purchase_date:Optional[date]=None; purchase_price:float=0; notes:str=''
 class RuleIn(BaseModel):
     entitlement:str='Alle Mitarbeiter'; group_name:str=''; approval_required:bool=False; approver:str=''; approval_type:str='Keine Genehmigung'; notes:str=''
 class ModernizationIn(BaseModel):
@@ -175,15 +277,17 @@ def update_room(rid:int,x:RoomIn,db:Session=Depends(db)):
 def create_child(rid:int,kind:str,payload:dict,db:Session=Depends(db)):
     r=db.get(Room,rid)
     if not r: raise HTTPException(404,'Raum nicht gefunden')
+    if kind not in ['equipment','rules','modernizations','tickets']: raise HTTPException(400,'Ungültiger Bereich')
     cls=model_for(kind)
-    data=dict(payload); data['room_id']=rid
+    data=schema_for(kind)(**payload).model_dump(); data['room_id']=rid
     obj=cls(**data); db.add(obj); db.commit(); db.refresh(obj); return dump(obj)
 @app.put('/api/{kind}/{oid}')
 def update_child(kind:str,oid:int,payload:dict,db:Session=Depends(db)):
     if kind not in ['equipment','rules','modernizations','tickets']: raise HTTPException(400,'Ungültiger Bereich')
     obj=db.get(model_for(kind),oid)
     if not obj: raise HTTPException(404,'Eintrag nicht gefunden')
-    for k,v in payload.items():
+    data=schema_for(kind)(**payload).model_dump()
+    for k,v in data.items():
         if hasattr(obj,k) and k!='id' and k!='room_id': setattr(obj,k,v)
     db.commit(); db.refresh(obj); return dump(obj)
 @app.delete('/api/{kind}/{oid}')
