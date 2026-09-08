@@ -101,6 +101,17 @@ class Ticket(Base):
     description: Mapped[str] = mapped_column(Text, default='')
     notes: Mapped[str] = mapped_column(Text, default='')
 
+class BudgetSettings(Base):
+    __tablename__ = 'budget_settings'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    overall_budget: Mapped[float] = mapped_column(Float, default=0)
+
+class SiteBudget(Base):
+    __tablename__ = 'site_budgets'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    site: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    budget: Mapped[float] = mapped_column(Float, default=0)
+
 Base.metadata.create_all(engine)
 
 app = FastAPI(title='Meetingraumverwaltung', version='1.0.0')
@@ -120,6 +131,9 @@ def model_for(kind):
 @app.get('/')
 def index(): return FileResponse(BASE/'app'/'static'/'index.html')
 
+@app.get('/health')
+def health(): return {'status': 'ok'}
+
 @app.get('/api/rooms')
 def rooms(db:Session=Depends(db)):
     return [dump(x) for x in db.scalars(select(Room).order_by(Room.site,Room.building,Room.floor,Room.name)).all()]
@@ -136,6 +150,58 @@ def room_detail(room_id:int, db:Session=Depends(db)):
     data['modernizations']=[dump(x) for x in r.projects]
     data['tickets']=[dump(x) for x in sorted(r.tickets,key=lambda x:x.id,reverse=True)]
     return data
+
+@app.get('/api/budget-overview')
+def budget_overview(db:Session=Depends(db)):
+    configured_sites = {item.site: item.budget for item in db.scalars(select(SiteBudget)).all()}
+    totals = {}
+    for room in db.scalars(select(Room)).all():
+        site = room.site or 'Ohne Standort'
+        entry = totals.setdefault(site, {'site': site, 'rooms': 0, 'budget': configured_sites.get(site, 0), 'planned': 0, 'spent': 0})
+        entry['rooms'] += 1
+        for project in room.projects:
+            entry['planned'] += project.budget or 0
+            entry['spent'] += project.actual_cost or 0
+    for site, budget in configured_sites.items():
+        totals.setdefault(site, {'site': site, 'rooms': 0, 'budget': budget, 'planned': 0, 'spent': 0})
+    sites = sorted(totals.values(), key=lambda item: item['site'])
+    for entry in sites:
+        entry['available'] = entry['budget'] - entry['planned']
+    settings = db.scalar(select(BudgetSettings).limit(1))
+    overall_budget = settings.overall_budget if settings else 0
+    total = {
+        'budget': overall_budget,
+        'planned': sum(item['planned'] for item in sites),
+        'spent': sum(item['spent'] for item in sites),
+    }
+    total['available'] = total['budget'] - total['planned']
+    return {'total': total, 'sites': sites}
+
+class BudgetAmountIn(BaseModel):
+    budget: float = 0
+
+@app.put('/api/budget-overview/global')
+def update_overall_budget(payload:BudgetAmountIn, db:Session=Depends(db)):
+    settings = db.scalar(select(BudgetSettings).limit(1))
+    if not settings:
+        settings = BudgetSettings(overall_budget=payload.budget)
+        db.add(settings)
+    else:
+        settings.overall_budget = payload.budget
+    db.commit()
+    return {'overall_budget': settings.overall_budget}
+
+@app.put('/api/budget-overview/sites/{site}')
+def update_site_budget(site:str, payload:BudgetAmountIn, db:Session=Depends(db)):
+    if not site.strip(): raise HTTPException(400, 'Standort darf nicht leer sein')
+    entry = db.scalar(select(SiteBudget).where(SiteBudget.site == site))
+    if not entry:
+        entry = SiteBudget(site=site, budget=payload.budget)
+        db.add(entry)
+    else:
+        entry.budget = payload.budget
+    db.commit()
+    return {'site': entry.site, 'budget': entry.budget}
 
 @app.get('/api/dashboard')
 def dashboard(db:Session=Depends(db)):
@@ -175,6 +241,7 @@ def update_room(rid:int,x:RoomIn,db:Session=Depends(db)):
 def create_child(rid:int,kind:str,payload:dict,db:Session=Depends(db)):
     r=db.get(Room,rid)
     if not r: raise HTTPException(404,'Raum nicht gefunden')
+    if kind not in ['equipment','rules','modernizations','tickets']: raise HTTPException(400,'Ungültiger Bereich')
     cls=model_for(kind)
     data=dict(payload); data['room_id']=rid
     obj=cls(**data); db.add(obj); db.commit(); db.refresh(obj); return dump(obj)
