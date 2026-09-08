@@ -140,6 +140,28 @@ def room_detail(room_id:int, db:Session=Depends(db)):
     data['tickets']=[dump(x) for x in sorted(r.tickets,key=lambda x:x.id,reverse=True)]
     return data
 
+@app.get('/api/budget-overview')
+def budget_overview(db:Session=Depends(db)):
+    totals = {}
+    for room in db.scalars(select(Room)).all():
+        site = room.site or 'Ohne Standort'
+        entry = totals.setdefault(site, {'site': site, 'rooms': 0, 'budget': 0, 'commissioned': 0, 'actual': 0})
+        entry['rooms'] += 1
+        for project in room.projects:
+            entry['budget'] += project.budget or 0
+            entry['commissioned'] += project.commissioned or 0
+            entry['actual'] += project.actual_cost or 0
+    sites = sorted(totals.values(), key=lambda item: item['site'])
+    for entry in sites:
+        entry['available'] = entry['budget'] - entry['commissioned']
+    total = {
+        'budget': sum(item['budget'] for item in sites),
+        'commissioned': sum(item['commissioned'] for item in sites),
+        'actual': sum(item['actual'] for item in sites),
+    }
+    total['available'] = total['budget'] - total['commissioned']
+    return {'total': total, 'sites': sites}
+
 @app.get('/api/dashboard')
 def dashboard(db:Session=Depends(db)):
     rows=db.scalars(select(Modernization)).all()

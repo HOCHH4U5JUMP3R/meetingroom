@@ -4,8 +4,11 @@ const groupContainer = document.querySelector('#roomGroups');
 const emptyState = document.querySelector('#overviewEmpty');
 const errorState = document.querySelector('#overviewError');
 const roomCount = document.querySelector('#roomCount');
+const budgetTotals = document.querySelector('#budgetTotals');
+const siteBudgets = document.querySelector('#siteBudgets');
 let allRooms = [];
 let selectedSite = '';
+let budgetOverview = null;
 
 function escapeHtml(value) {
   return String(value == null || value === '' ? '–' : value)
@@ -61,22 +64,44 @@ function renderRooms() {
         <div><div class="eyebrow">STANDORT</div><h2>${escapeHtml(site)}</h2></div>
         <span>${siteRooms.length} ${siteRooms.length === 1 ? 'Raum' : 'Räume'}</span>
       </div>
-      <div class="room-cards"></div>`;
+      <div class="room-list" role="list"></div>`;
 
-    const cards = section.querySelector('.room-cards');
+    const list = section.querySelector('.room-list');
     siteRooms.forEach(room => {
-      const card = document.createElement('a');
-      card.className = 'room-card';
-      card.href = `/static/room-detail.html?id=${encodeURIComponent(room.id)}`;
-      card.innerHTML = `
-        <div class="room-card-heading"><h3>${escapeHtml(room.name)}</h3><span class="status-badge">${escapeHtml(room.status || 'Aktiv')}</span></div>
-        <p>${escapeHtml(roomLocation(room))}</p>
-        <div class="room-card-meta"><span>${escapeHtml(room.category || 'Meetingraum')}</span>${room.seats != null ? `<span>${escapeHtml(room.seats)} Plätze</span>` : ''}</div>`;
-      cards.appendChild(card);
+      const row = document.createElement('a');
+      row.className = 'room-list-row';
+      row.setAttribute('role', 'listitem');
+      row.href = `/static/room-detail.html?id=${encodeURIComponent(room.id)}`;
+      row.innerHTML = `
+        <div><strong>${escapeHtml(room.name)}</strong><span>${escapeHtml(roomLocation(room))}</span></div>
+        <div class="room-list-category">${escapeHtml(room.category || 'Meetingraum')}</div>
+        <div class="room-list-seats">${room.seats != null ? `${escapeHtml(room.seats)} Plätze` : '–'}</div>
+        <span class="status-badge">${escapeHtml(room.status || 'Aktiv')}</span>
+        <span class="room-list-arrow" aria-hidden="true">›</span>`;
+      list.appendChild(row);
     });
     groupContainer.appendChild(section);
   });
 }
+
+function euro(value) {
+  return Number(value || 0).toLocaleString('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+}
+
+function renderBudgetOverview() {
+  if (!budgetOverview) return;
+  const total = budgetOverview.total;
+  budgetTotals.innerHTML = [
+    ['Gesamtbudget', total.budget],
+    ['Beauftragt', total.commissioned],
+    ['Ist-Kosten', total.actual],
+    ['Verfügbar', total.available]
+  ].map(([label, value]) => `<div><span>${label}</span><strong>${euro(value)}</strong></div>`).join('');
+  siteBudgets.innerHTML = budgetOverview.sites.map(site => `<tr>
+    <td>${escapeHtml(site.site)}</td><td>${escapeHtml(site.rooms)}</td><td>${euro(site.budget)}</td><td>${euro(site.commissioned)}</td><td>${euro(site.actual)}</td><td>${euro(site.available)}</td>
+  </tr>`).join('');
+}
+
 
 function renderFilters() {
   const seen = {};
@@ -102,14 +127,27 @@ function renderFilters() {
 }
 
 async function loadRooms() {
-  const response = await fetch('/api/rooms', { headers: { Accept: 'application/json' } });
-  if (!response.ok) throw new Error(`Räume konnten nicht geladen werden (HTTP ${response.status}).`);
-  const data = await response.json();
+  const roomsResponse = await fetch('/api/rooms', { headers: { Accept: 'application/json' } });
+  if (!roomsResponse.ok) throw new Error(`Räume konnten nicht geladen werden (HTTP ${roomsResponse.status}).`);
+  const data = await roomsResponse.json();
   if (!Array.isArray(data)) throw new Error('Die Raumdaten haben ein ungültiges Format.');
   allRooms = data;
   errorState.hidden = true;
   renderFilters();
   renderRooms();
+
+  const budgetResponse = await fetch('/api/budget-overview', { headers: { Accept: 'application/json' } });
+  if (!budgetResponse.ok) {
+    budgetTotals.textContent = `Budgetübersicht konnte nicht geladen werden (HTTP ${budgetResponse.status}).`;
+    return;
+  }
+  const budgetData = await budgetResponse.json();
+  if (!budgetData || !budgetData.total || !Array.isArray(budgetData.sites)) {
+    budgetTotals.textContent = 'Die Budgetdaten haben ein ungültiges Format.';
+    return;
+  }
+  budgetOverview = budgetData;
+  renderBudgetOverview();
 }
 
 searchInput.addEventListener('input', renderRooms);
