@@ -120,6 +120,9 @@ def model_for(kind):
 @app.get('/')
 def index(): return FileResponse(BASE/'app'/'static'/'index.html')
 
+@app.get('/health')
+def health(): return {'status': 'ok'}
+
 @app.get('/api/rooms')
 def rooms(db:Session=Depends(db)):
     return [dump(x) for x in db.scalars(select(Room).order_by(Room.site,Room.building,Room.floor,Room.name)).all()]
@@ -175,6 +178,7 @@ def update_room(rid:int,x:RoomIn,db:Session=Depends(db)):
 def create_child(rid:int,kind:str,payload:dict,db:Session=Depends(db)):
     r=db.get(Room,rid)
     if not r: raise HTTPException(404,'Raum nicht gefunden')
+    if kind not in ['equipment','rules','modernizations','tickets']: raise HTTPException(400,'Ungültiger Bereich')
     cls=model_for(kind)
     data=dict(payload); data['room_id']=rid
     obj=cls(**data); db.add(obj); db.commit(); db.refresh(obj); return dump(obj)
