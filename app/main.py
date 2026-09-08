@@ -56,6 +56,7 @@ class Equipment(Base):
     status: Mapped[str] = mapped_column(String(50), default='Aktiv')
     purchase_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     purchase_price: Mapped[float] = mapped_column(Float, default=0)
+    host_name: Mapped[str] = mapped_column(String(200), default='')
     notes: Mapped[str] = mapped_column(Text, default='')
 
 class BookingRule(Base):
@@ -127,6 +128,8 @@ with engine.begin() as connection:
     columns = {row[1] for row in connection.exec_driver_sql('PRAGMA table_info(equipment)')}
     if 'purchase_price' not in columns:
         connection.exec_driver_sql('ALTER TABLE equipment ADD COLUMN purchase_price FLOAT DEFAULT 0')
+    if 'host_name' not in columns:
+        connection.exec_driver_sql("ALTER TABLE equipment ADD COLUMN host_name VARCHAR(200) DEFAULT ''")
 
 app = FastAPI(title='Meetingraumverwaltung', version='1.0.0')
 app.mount('/static', StaticFiles(directory=BASE/'app'/'static'), name='static')
@@ -166,6 +169,11 @@ def room_detail(room_id:int, db:Session=Depends(db)):
     data['rules']=[dump(x) for x in r.rules]
     data['modernizations']=[dump(x) for x in r.projects]
     data['tickets']=[dump(x) for x in sorted(r.tickets,key=lambda x:x.id,reverse=True)]
+    modernization_dates = [item.completion_date or item.planned_end or item.start_date or date(item.project_year, 12, 31) for item in r.projects if item.completion_date or item.planned_end or item.start_date or item.project_year]
+    equipment_dates = [item.purchase_date for item in r.equipment if item.purchase_date]
+    latest = max(modernization_dates + equipment_dates, default=None)
+    data['last_modernization'] = latest.isoformat() if latest else None
+    data['host_name'] = next((item.host_name for item in r.equipment if item.category == 'VC-System' and item.host_name), '')
     return data
 
 def project_year(project):
@@ -254,7 +262,7 @@ def dashboard(db:Session=Depends(db)):
 class RoomIn(BaseModel):
     name:str; site:str=''; building:str=''; floor:str=''; room_number:str=''; length:Optional[float]=None; width:Optional[float]=None; height:Optional[float]=None; seats:Optional[int]=None; specialty:str=''; category:str=''; outlook_resource:str=''; connections:str=''; owner:str=''; host_name:str=''; notes:str=''; status:str='Aktiv'; last_modernization:Optional[date]=None
 class EquipmentIn(BaseModel):
-    name:str; category:Literal['Monitor','VC-System','Mikrofon','Lautsprecher','Zubehör']='Monitor'; manufacturer:str=''; model:str=''; serial:str=''; size_inches:Optional[float]=None; mounting:str=''; status:str='Aktiv'; purchase_date:Optional[date]=None; purchase_price:float=0; notes:str=''
+    name:str; category:Literal['Monitor','VC-System','Mikrofon','Lautsprecher','Zubehör']='Monitor'; manufacturer:str=''; model:str=''; serial:str=''; size_inches:Optional[float]=None; mounting:str=''; status:str='Aktiv'; purchase_date:Optional[date]=None; purchase_price:float=0; host_name:str=''; notes:str=''
 class RuleIn(BaseModel):
     entitlement:str='Alle Mitarbeiter'; group_name:str=''; approval_required:bool=False; approver:str=''; approval_type:str='Keine Genehmigung'; notes:str=''
 class ModernizationIn(BaseModel):

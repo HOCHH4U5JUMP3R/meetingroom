@@ -50,7 +50,9 @@
 
                 <div class="field">
                     <label>Standort</label>
-                    <input name="site">
+                    <select name="site">
+                        <option value="">Bitte wählen</option><option>Nürnberg</option><option>Überlingen</option><option>Frankfurt</option><option>Rostock</option><option>Laupheim</option><option>Dresden</option><option>Gilching</option><option>Hamburg</option><option>Nyírbátor</option><option>Debrecen</option><option>Toulouse</option><option>Colomiers</option><option>Queretaro</option><option>Craiova</option>
+                    </select>
                 </div>
 
                 <div class="field">
@@ -110,31 +112,21 @@
                 </div>
 
                 <div class="field">
-                    <label>Host-Name</label>
-                    <input name="host_name">
-                </div>
-
-                <div class="field">
                     <label>Outlook-Ressource</label>
                     <input name="outlook_resource">
                 </div>
 
                 <div class="field">
                     <label>Status</label>
-                    <input name="status">
+                    <select name="status"><option>Aktiv</option><option>Modernisierung notwendig</option><option>Modernisierung geplant</option><option>Störung</option><option>Inaktiv</option></select>
                 </div>
 
-                <div class="field">
-                    <label>Letzte Modernisierung</label>
-                    <input name="last_modernization" type="date">
-                </div>
-
-                <div class="field full">
-                    <label>Anschlussmöglichkeiten</label>
-                    <textarea
-                        name="connections"
-                        rows="3"></textarea>
-                </div>
+                <fieldset class="field full checkbox-fieldset">
+                    <legend>Anschlussmöglichkeiten</legend>
+                    <label><input name="connections_choice" value="Wireless MiraCast" type="checkbox"> Wireless MiraCast</label>
+                    <label><input name="connections_choice" value="HDMI" type="checkbox"> HDMI</label>
+                    <label><input name="connections_choice" value="USB-C" type="checkbox"> USB-C</label>
+                </fieldset>
 
                 <div class="field full">
                     <label>Raum-Besonderheiten</label>
@@ -204,9 +196,7 @@ const fields = [
     'height',
     'category',
     'owner',
-    'host_name',
     'outlook_resource',
-    'connections',
     'specialty',
     'notes',
     'status',
@@ -241,7 +231,8 @@ async function loadRoom() {
             input.value =
                 room[field] ?? '';
         }
-    }
+    }    const connections = String(room.connections || '').split(' · ');
+    form.querySelectorAll('[name="connections_choice"]').forEach(input => { input.checked = connections.includes(input.value); });
 }
 
 
@@ -291,6 +282,7 @@ form.onsubmit = async event => {
         data[field] = value;
     }
 
+    data.connections = Array.from(form.querySelectorAll('[name="connections_choice"]:checked')).map(input => input.value).join(' · ');
 
     const response =
         await fetch(
