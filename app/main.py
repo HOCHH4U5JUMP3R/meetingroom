@@ -1,6 +1,6 @@
 from pathlib import Path
 from datetime import date
-from typing import Optional
+from typing import Literal, Optional
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -55,6 +55,7 @@ class Equipment(Base):
     mounting: Mapped[str] = mapped_column(String(80), default='')
     status: Mapped[str] = mapped_column(String(50), default='Aktiv')
     purchase_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    purchase_price: Mapped[float] = mapped_column(Float, default=0)
     notes: Mapped[str] = mapped_column(Text, default='')
 
 class BookingRule(Base):
@@ -121,6 +122,11 @@ class YearlyBudget(Base):
     budget: Mapped[float] = mapped_column(Float, default=0)
 
 Base.metadata.create_all(engine)
+# Lightweight migration for existing SQLite installations.
+with engine.begin() as connection:
+    columns = {row[1] for row in connection.exec_driver_sql('PRAGMA table_info(equipment)')}
+    if 'purchase_price' not in columns:
+        connection.exec_driver_sql('ALTER TABLE equipment ADD COLUMN purchase_price FLOAT DEFAULT 0')
 
 app = FastAPI(title='Meetingraumverwaltung', version='1.0.0')
 app.mount('/static', StaticFiles(directory=BASE/'app'/'static'), name='static')
@@ -193,21 +199,24 @@ def budget_overview(year:Optional[int]=None, quarter:Optional[int]=None, month:O
     for room in db.scalars(select(Room)).all():
         site = room.site or 'Ohne Standort'
         budget = configured.get((site, selected_year), legacy_sites.get(site, 0) if selected_year == date.today().year else 0)
-        entry = totals.setdefault(site, {'site': site, 'rooms': 0, 'budget': budget, 'planned': 0, 'spent': 0})
+        entry = totals.setdefault(site, {'site': site, 'rooms': 0, 'budget': budget, 'planned': 0, 'spent': 0, 'equipment_spent': 0})
         entry['rooms'] += 1
+        for equipment in room.equipment:
+            if equipment.purchase_date and equipment.purchase_date.year == selected_year and (month is None or equipment.purchase_date.month == month) and (quarter is None or (equipment.purchase_date.month - 1) // 3 + 1 == quarter):
+                entry['equipment_spent'] += equipment.purchase_price or 0
         for project in room.projects:
             if budget_scope_matches(project, selected_year, quarter, month):
                 entry['planned'] += project.budget or 0
                 entry['spent'] += project.actual_cost or 0
     for (site, budget_year), budget in configured.items():
         if budget_year == selected_year:
-            totals.setdefault(site or 'Ohne Standort', {'site': site or 'Ohne Standort', 'rooms': 0, 'budget': budget, 'planned': 0, 'spent': 0})
+            totals.setdefault(site or 'Ohne Standort', {'site': site or 'Ohne Standort', 'rooms': 0, 'budget': budget, 'planned': 0, 'spent': 0, 'equipment_spent': 0})
     sites = sorted(totals.values(), key=lambda item: item['site'])
-    for entry in sites: entry['available'] = entry['budget'] - entry['planned']
+    for entry in sites: entry['available'] = entry['budget'] - entry['planned'] - entry['equipment_spent']; entry['spent'] += entry['equipment_spent']
     settings = db.scalar(select(BudgetSettings).limit(1))
     overall_budget = configured.get((None, selected_year), settings.overall_budget if settings and selected_year == date.today().year else 0)
     total = {'budget': overall_budget, 'planned': sum(item['planned'] for item in sites), 'spent': sum(item['spent'] for item in sites)}
-    total['available'] = total['budget'] - total['planned']
+    total['available'] = total['budget'] - total['planned'] - sum(item['equipment_spent'] for item in sites)
     return {'year': selected_year, 'quarter': quarter, 'month': month, 'years': budget_years(db), 'total': total, 'sites': sites}
 
 class BudgetAmountIn(BaseModel):
@@ -245,7 +254,7 @@ def dashboard(db:Session=Depends(db)):
 class RoomIn(BaseModel):
     name:str; site:str=''; building:str=''; floor:str=''; room_number:str=''; length:Optional[float]=None; width:Optional[float]=None; height:Optional[float]=None; seats:Optional[int]=None; specialty:str=''; category:str=''; outlook_resource:str=''; connections:str=''; owner:str=''; host_name:str=''; notes:str=''; status:str='Aktiv'; last_modernization:Optional[date]=None
 class EquipmentIn(BaseModel):
-    name:str; category:str=''; manufacturer:str=''; model:str=''; serial:str=''; size_inches:Optional[float]=None; mounting:str=''; status:str='Aktiv'; purchase_date:Optional[date]=None; notes:str=''
+    name:str; category:Literal['Monitor','VC-System','Mikrofon','Lautsprecher','Zubehör']='Monitor'; manufacturer:str=''; model:str=''; serial:str=''; size_inches:Optional[float]=None; mounting:str=''; status:str='Aktiv'; purchase_date:Optional[date]=None; purchase_price:float=0; notes:str=''
 class RuleIn(BaseModel):
     entitlement:str='Alle Mitarbeiter'; group_name:str=''; approval_required:bool=False; approver:str=''; approval_type:str='Keine Genehmigung'; notes:str=''
 class ModernizationIn(BaseModel):
