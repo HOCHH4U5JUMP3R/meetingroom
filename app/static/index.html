@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Meetingraumverwaltung – Übersicht</title>
-  <link rel="stylesheet" href="/static/style.css?v=12">
+  <link rel="stylesheet" href="/static/style.css?v=13">
 </head>
 <body>
   <header class="topbar">
@@ -29,6 +29,7 @@
       <div id="siteFilters" class="site-filters" aria-label="Standort auswählen"></div>
     </section>
 
+    <p id="overviewError" class="form-message" role="alert" hidden></p>
     <section id="overviewEmpty" class="empty-state" hidden>
       <div class="empty-icon">⌂</div>
       <h2>Keine Räume gefunden</h2>
@@ -36,6 +37,6 @@
     </section>
     <section id="roomGroups" class="site-groups" aria-live="polite"></section>
   </main>
-  <script src="/static/overview.js?v=12"></script>
+  <script src="/static/overview.js?v=13"></script>
 </body>
 </html>
