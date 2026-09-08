@@ -1,9 +1,15 @@
 services:
   meetingroom-app:
-    build: .
+    image: ${MEETINGROOM_IMAGE:-ghcr.io/OWNER/meetingroom:latest}
     container_name: meetingroom-app
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "${MEETINGROOM_PORT:-8080}:8080"
     volumes:
-      - ./data:/app/data
+      - "${MEETINGROOM_DATA_DIR:-./data}:/app/data"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
