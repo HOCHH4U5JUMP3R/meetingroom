@@ -4,11 +4,8 @@ const groupContainer = document.querySelector('#roomGroups');
 const emptyState = document.querySelector('#overviewEmpty');
 const errorState = document.querySelector('#overviewError');
 const roomCount = document.querySelector('#roomCount');
-const budgetTotals = document.querySelector('#budgetTotals');
-const siteBudgets = document.querySelector('#siteBudgets');
 let allRooms = [];
 let selectedSite = '';
-let budgetOverview = null;
 
 function escapeHtml(value) {
   return String(value == null || value === '' ? '–' : value)
@@ -84,24 +81,6 @@ function renderRooms() {
   });
 }
 
-function euro(value) {
-  return Number(value || 0).toLocaleString('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
-}
-
-function renderBudgetOverview() {
-  if (!budgetOverview) return;
-  const total = budgetOverview.total;
-  budgetTotals.innerHTML = [
-    ['Gesamtbudget', total.budget],
-    ['Beauftragt', total.commissioned],
-    ['Ist-Kosten', total.actual],
-    ['Verfügbar', total.available]
-  ].map(([label, value]) => `<div><span>${label}</span><strong>${euro(value)}</strong></div>`).join('');
-  siteBudgets.innerHTML = budgetOverview.sites.map(site => `<tr>
-    <td>${escapeHtml(site.site)}</td><td>${escapeHtml(site.rooms)}</td><td>${euro(site.budget)}</td><td>${euro(site.commissioned)}</td><td>${euro(site.actual)}</td><td>${euro(site.available)}</td>
-  </tr>`).join('');
-}
-
 
 function renderFilters() {
   const seen = {};
@@ -136,18 +115,7 @@ async function loadRooms() {
   renderFilters();
   renderRooms();
 
-  const budgetResponse = await fetch('/api/budget-overview', { headers: { Accept: 'application/json' } });
-  if (!budgetResponse.ok) {
-    budgetTotals.textContent = `Budgetübersicht konnte nicht geladen werden (HTTP ${budgetResponse.status}).`;
-    return;
-  }
-  const budgetData = await budgetResponse.json();
-  if (!budgetData || !budgetData.total || !Array.isArray(budgetData.sites)) {
-    budgetTotals.textContent = 'Die Budgetdaten haben ein ungültiges Format.';
-    return;
-  }
-  budgetOverview = budgetData;
-  renderBudgetOverview();
+
 }
 
 searchInput.addEventListener('input', renderRooms);
