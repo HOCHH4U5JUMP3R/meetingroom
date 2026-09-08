@@ -1,250 +1,48 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="de">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Meetingraumverwaltung</title>
-    <link rel="stylesheet" href="/static/style.css?v=10">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Meetingraumverwaltung – Übersicht</title>
+  <link rel="stylesheet" href="/static/style.css?v=14">
 </head>
-
 <body>
-
-<header class="topbar">
+  <header class="topbar">
     <div class="brand">
-        <h1>Meetingraumverwaltung</h1>
-        <p>Digitale Raumakte &amp; Modernisierungsverwaltung</p>
+      <h1>Meetingraumverwaltung</h1>
+      <p>Standorte und Meetingräume im Überblick</p>
     </div>
-
-    <button id="newRoom" type="button" class="btn btn-primary">
-        ＋ Neuer Raum
-    </button>
-</header>
-
-<main>
-
-    <!-- RAUMAUSWAHL -->
-    <section class="room-selector">
-        <div class="selector-label">MEETINGRAUM</div>
-
-        <div class="selector-row">
-            <div class="select-wrap">
-                <span class="select-icon">⌕</span>
-
-                <select id="roomSelect">
-                    <option value="">Wird geladen…</option>
-                </select>
-            </div>
-
-            <div id="roomMeta" class="selector-meta"></div>
-        </div>
+    <a href="/static/room-form.html" class="btn btn-primary">＋ Neuer Raum</a>
+  </header>
+  <main>
+    <section class="overview-hero">
+      <div>
+        <div class="eyebrow">RAUMÜBERSICHT</div>
+        <h2>Meetingräume finden</h2>
+        <p>Wähle einen Standort oder suche direkt nach Raumname, Raumnummer, Gebäude oder Ausstattung.</p>
+      </div>
+      <div class="overview-count"><strong id="roomCount">–</strong><span>Räume</span></div>
     </section>
 
-
-    <!-- LEERZUSTAND -->
-    <section id="empty" class="empty-state">
-        <div class="empty-icon">⌂</div>
-        <h2>Raum auswählen</h2>
-        <p>
-            Wähle oben einen Meetingraum aus,
-            um die vollständige Raumakte zu öffnen.
-        </p>
+    <section class="budget-overview" aria-labelledby="budgetOverviewTitle">
+      <div class="budget-overview-head"><div><div class="eyebrow">BUDGETPLANUNG</div><h2 id="budgetOverviewTitle">Gesamtübersicht</h2></div><span>Alle Standorte</span></div>
+      <div id="budgetTotals" class="budget-summary" aria-live="polite"></div>
+      <div class="table-wrap"><table class="budget-table"><thead><tr><th>Standort</th><th>Räume</th><th>Budget</th><th>Beauftragt</th><th>Ist-Kosten</th><th>Verfügbar</th></tr></thead><tbody id="siteBudgets"></tbody></table></div>
     </section>
 
-
-    <!-- RAUMAKTE -->
-    <div id="app" hidden>
-
-        <!-- RAUMKOPF -->
-        <section class="room-header">
-
-            <div class="room-heading">
-
-                <div class="eyebrow">
-                    RAUMAKTE
-                </div>
-
-                <div class="room-title-row">
-                    <h2 id="roomTitle">–</h2>
-                    <span id="roomStatus" class="status-badge">–</span>
-                </div>
-
-                <div id="roomSubtitle" class="room-subtitle">
-                    –
-                </div>
-
-            </div>
-
-            <div class="room-actions">
-                <button id="editRoom" type="button" class="btn">
-                    Bearbeiten
-                </button>
-            </div>
-
-        </section>
-
-
-        <!-- STAMMDATEN / BUDGET -->
-        <section class="two-column top-grid">
-
-            <article class="panel">
-
-                <div class="panel-header">
-                    <div>
-                        <div class="panel-title">
-                            Stammdaten
-                        </div>
-
-                        <div class="panel-subtitle">
-                            Grunddaten des Meetingraums
-                        </div>
-                    </div>
-                </div>
-
-                <div id="roomData" class="data-grid"></div>
-
-            </article>
-
-
-            <article class="panel">
-
-                <div class="panel-header">
-                    <div>
-                        <div class="panel-title">
-                            Budget
-                        </div>
-
-                        <div class="panel-subtitle">
-                            Modernisierungsbudget dieses Raums
-                        </div>
-                    </div>
-                </div>
-
-                <div id="budget" class="budget-content"></div>
-
-            </article>
-
-        </section>
-
-
-        <!-- AUSSTATTUNG -->
-        <section class="panel">
-
-            <div class="panel-header">
-
-                <div>
-                    <div class="panel-title">
-                        Ausstattung
-                    </div>
-
-                    <div class="panel-subtitle">
-                        Installierte Geräte und Systeme
-                    </div>
-                </div>
-
-                <button id="addEquipment"
-                        type="button"
-                        class="btn btn-small">
-                    ＋ Ausstattung
-                </button>
-
-            </div>
-
-            <div id="equipment"></div>
-
-        </section>
-
-
-        <!-- MODERNISIERUNGEN -->
-        <section class="panel">
-
-            <div class="panel-header">
-
-                <div>
-                    <div class="panel-title">
-                        Modernisierungen
-                    </div>
-
-                    <div class="panel-subtitle">
-                        Projekte, Budgets und Umsetzungsstand
-                    </div>
-                </div>
-
-                <button id="addModernization"
-                        type="button"
-                        class="btn btn-small">
-                    ＋ Projekt
-                </button>
-
-            </div>
-
-            <div id="modernizations"></div>
-
-        </section>
-
-
-        <!-- BUCHUNG / TICKETS -->
-        <section class="two-column bottom-grid">
-
-            <article class="panel">
-
-                <div class="panel-header">
-
-                    <div>
-                        <div class="panel-title">
-                            Buchungsberechtigungen
-                        </div>
-
-                        <div class="panel-subtitle">
-                            Wer darf den Raum buchen?
-                        </div>
-                    </div>
-
-                    <button id="addRule"
-                            type="button"
-                            class="btn btn-small">
-                        ＋ Regel
-                    </button>
-
-                </div>
-
-                <div id="rules"></div>
-
-            </article>
-
-
-            <article class="panel">
-
-                <div class="panel-header">
-
-                    <div>
-                        <div class="panel-title">
-                            Tickets
-                        </div>
-
-                        <div class="panel-subtitle">
-                            Störungen und offene Vorgänge
-                        </div>
-                    </div>
-
-                    <button id="addTicket"
-                            type="button"
-                            class="btn btn-small">
-                        ＋ Ticket
-                    </button>
-
-                </div>
-
-                <div id="tickets"></div>
-
-            </article>
-
-        </section>
-
-    </div>
-
-</main>
-
-<script src="/static/app.js?v=10"></script>
-
+    <section class="overview-controls" aria-label="Raumfilter">
+      <label class="search-field" for="roomSearch"><span aria-hidden="true">⌕</span><input id="roomSearch" type="search" placeholder="Raum suchen …" autocomplete="off"></label>
+      <div id="siteFilters" class="site-filters" aria-label="Standort auswählen"></div>
+    </section>
+
+    <p id="overviewError" class="form-message" role="alert" hidden></p>
+    <section id="overviewEmpty" class="empty-state" hidden>
+      <div class="empty-icon">⌂</div>
+      <h2>Keine Räume gefunden</h2>
+      <p>Ändere die Suche oder lege einen neuen Meetingraum an.</p>
+    </section>
+    <section id="roomGroups" class="site-groups" aria-live="polite"></section>
+  </main>
+  <script src="/static/overview.js?v=14"></script>
 </body>
 </html>

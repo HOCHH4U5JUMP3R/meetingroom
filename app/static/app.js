@@ -118,55 +118,18 @@ const badge = (value) => {
    ROOMS
 ================================ */
 
-async function loadRooms(selectId = null) {
-
+async function loadRooms() {
     rooms = await api("/api/rooms");
+    const roomId = Number(new URLSearchParams(window.location.search).get("id"));
 
-    const select = $("#roomSelect");
-
-    select.innerHTML = "";
-
-    if (!rooms.length) {
-
-        select.innerHTML =
-            `<option value="">Keine Räume vorhanden</option>`;
-
+    if (!roomId) {
         $("#empty").hidden = false;
         $("#app").hidden = true;
-
         return;
     }
 
-
-    rooms.forEach(room => {
-
-        const option =
-            document.createElement("option");
-
-        option.value = room.id;
-
-        option.textContent =
-            room.name +
-            (
-                room.room_number
-                    ? ` · ${room.room_number}`
-                    : ""
-            );
-
-        select.appendChild(option);
-    });
-
-
-    const wanted =
-        selectId ??
-        current?.id ??
-        rooms[0].id;
-
-    select.value = String(wanted);
-
-    await loadRoom(Number(select.value));
+    await loadRoom(roomId);
 }
-
 
 async function loadRoom(id) {
 
@@ -243,23 +206,6 @@ function renderRoom() {
     $("#roomSubtitle").textContent =
         location.join(" · ") ||
         "Keine Standortdaten";
-
-
-    $("#roomMeta").textContent =
-        [
-            r.site,
-
-            r.building
-                ? `Gebäude ${r.building}`
-                : null,
-
-            r.floor
-                ? `Etage ${r.floor}`
-                : null
-
-        ]
-        .filter(Boolean)
-        .join(" · ");
 
 
     renderRoomData();
@@ -1080,15 +1026,6 @@ function editTicket(id) {
    EVENTS
 ================================ */
 
-$("#roomSelect").addEventListener(
-    "change",
-    async (event) => {
-        await loadRoom(
-            Number(event.target.value)
-        );
-    }
-);
-
 
 $("#newRoom").addEventListener(
     "click",
@@ -1167,11 +1104,8 @@ loadRooms().catch(error => {
 
     console.error(error);
 
-    $("#roomSelect").innerHTML =
-        `<option value="">
-            Fehler beim Laden der Räume
-        </option>`;
-
+    $("#empty h2").textContent = "Raum konnte nicht geladen werden";
+    $("#empty p").textContent = error.message;
     $("#empty").hidden = false;
     $("#app").hidden = true;
 });

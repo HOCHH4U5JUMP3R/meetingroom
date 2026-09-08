@@ -120,6 +120,9 @@ def model_for(kind):
 @app.get('/')
 def index(): return FileResponse(BASE/'app'/'static'/'index.html')
 
+@app.get('/health')
+def health(): return {'status': 'ok'}
+
 @app.get('/api/rooms')
 def rooms(db:Session=Depends(db)):
     return [dump(x) for x in db.scalars(select(Room).order_by(Room.site,Room.building,Room.floor,Room.name)).all()]
@@ -136,6 +139,28 @@ def room_detail(room_id:int, db:Session=Depends(db)):
     data['modernizations']=[dump(x) for x in r.projects]
     data['tickets']=[dump(x) for x in sorted(r.tickets,key=lambda x:x.id,reverse=True)]
     return data
+
+@app.get('/api/budget-overview')
+def budget_overview(db:Session=Depends(db)):
+    totals = {}
+    for room in db.scalars(select(Room)).all():
+        site = room.site or 'Ohne Standort'
+        entry = totals.setdefault(site, {'site': site, 'rooms': 0, 'budget': 0, 'commissioned': 0, 'actual': 0})
+        entry['rooms'] += 1
+        for project in room.projects:
+            entry['budget'] += project.budget or 0
+            entry['commissioned'] += project.commissioned or 0
+            entry['actual'] += project.actual_cost or 0
+    sites = sorted(totals.values(), key=lambda item: item['site'])
+    for entry in sites:
+        entry['available'] = entry['budget'] - entry['commissioned']
+    total = {
+        'budget': sum(item['budget'] for item in sites),
+        'commissioned': sum(item['commissioned'] for item in sites),
+        'actual': sum(item['actual'] for item in sites),
+    }
+    total['available'] = total['budget'] - total['commissioned']
+    return {'total': total, 'sites': sites}
 
 @app.get('/api/dashboard')
 def dashboard(db:Session=Depends(db)):
@@ -175,6 +200,7 @@ def update_room(rid:int,x:RoomIn,db:Session=Depends(db)):
 def create_child(rid:int,kind:str,payload:dict,db:Session=Depends(db)):
     r=db.get(Room,rid)
     if not r: raise HTTPException(404,'Raum nicht gefunden')
+    if kind not in ['equipment','rules','modernizations','tickets']: raise HTTPException(400,'Ungültiger Bereich')
     cls=model_for(kind)
     data=dict(payload); data['room_id']=rid
     obj=cls(**data); db.add(obj); db.commit(); db.refresh(obj); return dump(obj)
