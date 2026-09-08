@@ -1,0 +1,9 @@
+services:
+  meetingroom-app:
+    build: .
+    container_name: meetingroom-app
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
