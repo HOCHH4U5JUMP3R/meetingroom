@@ -18,7 +18,7 @@ function render() {
   });
   roomCount.textContent = rooms.length;
   empty.hidden = visible.length > 0;
-  groups.innerHTML = Object.entries(visible.reduce((bySite, room) => { const site = room.site || 'Ohne Standort'; (bySite[site] ||= []).push(room); return bySite; }, {})).map(([site, siteRooms]) => `
+  groups.innerHTML = Object.entries(visible.reduce((bySite, room) => { const site = room.site || 'Ohne Standort'; if (!bySite[site]) bySite[site] = []; bySite[site].push(room); return bySite; }, {})).map(([site, siteRooms]) => `
     <section class="site-group">
       <div class="site-group-header"><div><div class="eyebrow">STANDORT</div><h2>${escapeHtml(site)}</h2></div><span>${siteRooms.length} ${siteRooms.length === 1 ? 'Raum' : 'Räume'}</span></div>
       <div class="room-cards">${siteRooms.map(room => `
