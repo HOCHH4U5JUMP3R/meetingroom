@@ -35,9 +35,7 @@ class Room(Base):
     connections: Mapped[str] = mapped_column(Text, default='')
     owner: Mapped[str] = mapped_column(String(200), default='')
     host_name: Mapped[str] = mapped_column(String(200), default='')
-    inventory_number: Mapped[str] = mapped_column(String(120), default='')
-    mac_address: Mapped[str] = mapped_column(String(32), default='')
-    documents = relationship('EquipmentDocument', cascade='all, delete-orphan')
+    image_filename: Mapped[str] = mapped_column(String(255), default='')
     notes: Mapped[str] = mapped_column(Text, default='')
     status: Mapped[str] = mapped_column(String(50), default='Aktiv')
     last_modernization: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
@@ -140,6 +138,9 @@ class YearlyBudget(Base):
 Base.metadata.create_all(engine)
 # Lightweight migration for existing SQLite installations.
 with engine.begin() as connection:
+    room_columns = {row[1] for row in connection.exec_driver_sql('PRAGMA table_info(rooms)')}
+    if 'image_filename' not in room_columns:
+        connection.exec_driver_sql("ALTER TABLE rooms ADD COLUMN image_filename VARCHAR(255) DEFAULT ''")
     columns = {row[1] for row in connection.exec_driver_sql('PRAGMA table_info(equipment)')}
     if 'purchase_price' not in columns:
         connection.exec_driver_sql('ALTER TABLE equipment ADD COLUMN purchase_price FLOAT DEFAULT 0')
@@ -164,6 +165,9 @@ def db():
 def dump(obj):
     return {c.name:getattr(obj,c.name) for c in obj.__table__.columns}
 
+def room_image_url(room):
+    return f'/uploads/rooms/{room.id}/{room.image_filename}' if room.image_filename else None
+
 def model_for(kind):
     return {'rooms':Room,'equipment':Equipment,'rules':BookingRule,'modernizations':Modernization,'tickets':Ticket}[kind]
 
@@ -178,15 +182,20 @@ def health(): return {'status': 'ok'}
 
 @app.get('/api/rooms')
 def rooms(db:Session=Depends(db)):
-    return [dict(dump(x), planned_budget=sum(project.budget or 0 for project in x.projects), spent=sum(project.actual_cost or 0 for project in x.projects) + sum(item.purchase_price or 0 for item in x.equipment)) for x in db.scalars(select(Room).order_by(Room.site,Room.building,Room.floor,Room.name)).all()]
+    return [dict(
+        dump(x),
+        image_url=room_image_url(x),
+        ticket_count=len(x.tickets),
+        open_ticket_count=sum(ticket.status in ['Offen', 'In Bearbeitung'] for ticket in x.tickets),
+    ) for x in db.scalars(select(Room).order_by(Room.site,Room.building,Room.floor,Room.name)).all()]
 
 @app.get('/api/rooms/{room_id}')
 def room_detail(room_id:int, db:Session=Depends(db)):
     r=db.get(Room,room_id)
     if not r: raise HTTPException(404,'Raum nicht gefunden')
     data=dump(r)
+    data['image_url'] = room_image_url(r)
     data['area']=round((r.length or 0)*(r.width or 0),2) if r.length and r.width else None
-    data['volume']=round((r.length or 0)*(r.width or 0)*(r.height or 0),2) if r.length and r.width and r.height else None
     data['equipment']=[dict(dump(x), documents=[dict(dump(doc), url=f'/uploads/{x.id}/{doc.stored_name}') for doc in x.documents]) for x in r.equipment]
     data['rules']=[dump(x) for x in r.rules]
     data['modernizations']=[dump(x) for x in r.projects]
@@ -310,7 +319,26 @@ def update_room(rid:int,x:RoomIn,db:Session=Depends(db)):
 def delete_room(rid:int, db:Session=Depends(db)):
     room = db.get(Room, rid)
     if not room: raise HTTPException(404, 'Raum nicht gefunden')
+    if room.image_filename:
+        (UPLOADS / 'rooms' / str(rid) / room.image_filename).unlink(missing_ok=True)
     db.delete(room); db.commit(); return {'ok': True}
+
+@app.post('/api/rooms/{rid}/image')
+async def upload_room_image(rid:int, file:UploadFile=File(...), db:Session=Depends(db)):
+    room = db.get(Room, rid)
+    if not room: raise HTTPException(404, 'Raum nicht gefunden')
+    if not (file.content_type or '').startswith('image/'):
+        raise HTTPException(400, 'Es kann nur eine Bilddatei hochgeladen werden')
+    filename = Path(file.filename or '').name
+    if not filename: raise HTTPException(400, 'Datei fehlt')
+    directory = UPLOADS / 'rooms' / str(rid)
+    directory.mkdir(parents=True, exist_ok=True)
+    if room.image_filename:
+        (directory / room.image_filename).unlink(missing_ok=True)
+    room.image_filename = f'{uuid4().hex}_{filename}'
+    (directory / room.image_filename).write_bytes(await file.read())
+    db.commit()
+    return {'image_url': room_image_url(room)}
 
 @app.post('/api/equipment/{equipment_id}/documents')
 async def upload_equipment_document(equipment_id:int, kind:str, file:UploadFile=File(...), db:Session=Depends(db)):

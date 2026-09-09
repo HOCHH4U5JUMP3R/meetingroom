@@ -4,231 +4,56 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Meetingraumverwaltung</title>
-    <link rel="stylesheet" href="/static/style.css?v=12">
+    <link rel="stylesheet" href="/static/style.css?v=18">
 </head>
-
 <body>
-
 <header class="topbar">
-    <div class="brand">
-        <h1>Meetingraumverwaltung</h1>
-        <p>Digitale Raumakte &amp; Modernisierungsverwaltung</p>
-    </div>
-
-    <button id="newRoom" type="button" class="btn btn-primary">
-        ＋ Neuer Raum
-    </button>
+    <div class="brand"><h1>Meetingraumverwaltung</h1><p>Digitale Raumakte &amp; Modernisierungsverwaltung</p></div>
+    <button id="newRoom" type="button" class="btn btn-primary">＋ Neuer Raum</button>
 </header>
-
 <main>
-
     <a href="/" class="btn">← Zur Übersicht</a>
-
-
-    <!-- LEERZUSTAND -->
-    <section id="empty" class="empty-state">
-        <div class="empty-icon">⌂</div>
-        <h2>Kein Meetingraum ausgewählt</h2>
-        <p>
-            Öffne einen Raum über die Standortübersicht,
-            um die vollständige Raumakte zu sehen.
-        </p>
-    </section>
-
-
-    <!-- RAUMAKTE -->
+    <section id="empty" class="empty-state"><div class="empty-icon">⌂</div><h2>Kein Meetingraum ausgewählt</h2><p>Öffne einen Raum über die Standortübersicht, um die vollständige Raumakte zu sehen.</p></section>
     <div id="app" hidden>
-
-        <!-- RAUMKOPF -->
         <section class="room-header">
-
             <div class="room-heading">
-
-                <div class="eyebrow">
-                    RAUMAKTE
-                </div>
-
-                <div class="room-title-row">
-                    <h2 id="roomTitle">–</h2>
-                    <span id="roomStatus" class="status-badge">–</span>
-                </div>
-
-                <div id="roomSubtitle" class="room-subtitle">
-                    –
-                </div>
-
+                <div class="eyebrow">RAUMAKTE</div>
+                <div class="room-title-row"><h2 id="roomTitle">–</h2><span id="roomStatus" class="status-badge">–</span></div>
+                <div id="roomSubtitle" class="room-subtitle">–</div>
             </div>
-
-            <div class="room-actions">
-                <button id="editRoom" type="button" class="btn">Bearbeiten</button>
-                <button id="deleteRoom" type="button" class="btn">Raum löschen</button>
-            </div>
-
+            <img id="roomImage" class="room-image" alt="Raumbild" hidden>
+            <div class="room-actions"><button id="editRoom" type="button" class="btn">Bearbeiten</button></div>
         </section>
 
-
-        <!-- STAMMDATEN / BUDGET -->
         <section class="two-column top-grid">
-
             <article class="panel">
-
-                <div class="panel-header">
-                    <div>
-                        <div class="panel-title">
-                            Stammdaten
-                        </div>
-
-                        <div class="panel-subtitle">
-                            Grunddaten des Meetingraums
-                        </div>
-                    </div>
-                </div>
-
+                <div class="panel-header"><div><div class="panel-title">Stammdaten</div><div class="panel-subtitle">Grunddaten des Meetingraums</div></div></div>
                 <div id="roomData" class="data-grid"></div>
-
             </article>
-
-
             <article class="panel">
-
-                <div class="panel-header">
-                    <div>
-                        <div class="panel-title">
-                            Budget
-                        </div>
-
-                        <div class="panel-subtitle">
-                            Modernisierungsbudget dieses Raums
-                        </div>
-                    </div>
-                </div>
-
-                <div id="budget" class="budget-content"></div>
-
+                <div class="panel-header"><div><div class="panel-title">Modernisierungen</div><div class="panel-subtitle">Projekte und Umsetzungsstand</div></div><button id="addModernization" type="button" class="btn btn-small">＋ Projekt</button></div>
+                <div id="modernizations"></div>
             </article>
-
         </section>
 
-
-        <!-- AUSSTATTUNG -->
         <section class="panel">
+            <div class="panel-header"><div><div class="panel-title">Tickets</div><div class="panel-subtitle">Störungen und offene Vorgänge</div></div><button id="addTicket" type="button" class="btn btn-small">＋ Ticket</button></div>
+            <div id="tickets"></div>
+        </section>
 
-            <div class="panel-header">
-
-                <div>
-                    <div class="panel-title">
-                        Ausstattung
-                    </div>
-
-                    <div class="panel-subtitle">
-                        Installierte Geräte und Systeme
-                    </div>
-                </div>
-
-                <button id="addEquipment"
-                        type="button"
-                        class="btn btn-small">
-                    ＋ Ausstattung
-                </button>
-
-            </div>
-
+        <section class="panel">
+            <div class="panel-header"><div><div class="panel-title">Ausstattung</div><div class="panel-subtitle">Installierte Geräte und Systeme</div></div><button id="addEquipment" type="button" class="btn btn-small">＋ Ausstattung</button></div>
             <div id="equipment"></div>
-
         </section>
 
-
-        <!-- MODERNISIERUNGEN -->
         <section class="panel">
-
-            <div class="panel-header">
-
-                <div>
-                    <div class="panel-title">
-                        Modernisierungen
-                    </div>
-
-                    <div class="panel-subtitle">
-                        Projekte, Budgets und Umsetzungsstand
-                    </div>
-                </div>
-
-                <button id="addModernization"
-                        type="button"
-                        class="btn btn-small">
-                    ＋ Projekt
-                </button>
-
-            </div>
-
-            <div id="modernizations"></div>
-
+            <div class="panel-header"><div><div class="panel-title">Buchungsberechtigungen</div><div class="panel-subtitle">Wer darf den Raum buchen?</div></div><button id="addRule" type="button" class="btn btn-small">＋ Regel</button></div>
+            <div id="rules"></div>
         </section>
 
-
-        <!-- BUCHUNG / TICKETS -->
-        <section class="two-column bottom-grid">
-
-            <article class="panel">
-
-                <div class="panel-header">
-
-                    <div>
-                        <div class="panel-title">
-                            Buchungsberechtigungen
-                        </div>
-
-                        <div class="panel-subtitle">
-                            Wer darf den Raum buchen?
-                        </div>
-                    </div>
-
-                    <button id="addRule"
-                            type="button"
-                            class="btn btn-small">
-                        ＋ Regel
-                    </button>
-
-                </div>
-
-                <div id="rules"></div>
-
-            </article>
-
-
-            <article class="panel">
-
-                <div class="panel-header">
-
-                    <div>
-                        <div class="panel-title">
-                            Tickets
-                        </div>
-
-                        <div class="panel-subtitle">
-                            Störungen und offene Vorgänge
-                        </div>
-                    </div>
-
-                    <button id="addTicket"
-                            type="button"
-                            class="btn btn-small">
-                        ＋ Ticket
-                    </button>
-
-                </div>
-
-                <div id="tickets"></div>
-
-            </article>
-
-        </section>
-
+        <div class="room-danger-zone"><button id="deleteRoom" type="button" class="btn btn-danger">Raum löschen</button></div>
     </div>
-
 </main>
-
-<script src="/static/app.js?v=12"></script>
-
+<script src="/static/app.js?v=18"></script>
 </body>
 </html>
