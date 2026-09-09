@@ -182,7 +182,12 @@ def health(): return {'status': 'ok'}
 
 @app.get('/api/rooms')
 def rooms(db:Session=Depends(db)):
-    return [dict(dump(x), planned_budget=sum(project.budget or 0 for project in x.projects), spent=sum(project.actual_cost or 0 for project in x.projects) + sum(item.purchase_price or 0 for item in x.equipment)) for x in db.scalars(select(Room).order_by(Room.site,Room.building,Room.floor,Room.name)).all()]
+    return [dict(
+        dump(x),
+        image_url=room_image_url(x),
+        ticket_count=len(x.tickets),
+        open_ticket_count=sum(ticket.status in ['Offen', 'In Bearbeitung'] for ticket in x.tickets),
+    ) for x in db.scalars(select(Room).order_by(Room.site,Room.building,Room.floor,Room.name)).all()]
 
 @app.get('/api/rooms/{room_id}')
 def room_detail(room_id:int, db:Session=Depends(db)):

@@ -28,6 +28,20 @@ function roomLocation(room) {
   return parts.join(' · ') || 'Keine Standortdaten';
 }
 
+function statusClass(status) {
+  const value = String(status || '').toLowerCase();
+  if (value.includes('aktiv')) return 'success';
+  if (value.includes('störung')) return 'danger';
+  if (value.includes('modernisierung')) return 'warning';
+  return '';
+}
+
+function ticketLabel(room) {
+  const open = Number(room.open_ticket_count || 0);
+  const total = Number(room.ticket_count || 0);
+  return `${open} offen · ${total} gesamt`;
+}
+
 function filteredRooms() {
   const query = searchInput.value.trim().toLowerCase();
   return allRooms.filter(room => {
@@ -69,11 +83,16 @@ function renderRooms() {
       row.className = 'room-list-row';
       row.setAttribute('role', 'listitem');
       row.href = `/static/room-detail.html?id=${encodeURIComponent(room.id)}`;
+      const image = room.image_url
+        ? `<img class="room-list-image" src="${escapeHtml(room.image_url)}" alt="Raumbild ${escapeHtml(room.name)}">`
+        : `<div class="room-list-image room-list-image-placeholder" aria-hidden="true">⌂</div>`;
       row.innerHTML = `
-        <div><strong>${escapeHtml(room.name)}</strong><span>${escapeHtml(roomLocation(room))}</span></div>
-        <div class="room-list-category">${escapeHtml(room.category || 'Meetingraum')}</div>
-        <div class="room-list-seats">${room.seats != null ? `${escapeHtml(room.seats)} Plätze` : '–'}</div><div class="room-list-budget">Budget: ${Number(room.planned_budget || 0).toLocaleString('de-DE', {style:'currency', currency:'EUR', maximumFractionDigits:0})}</div>
-        <span class="status-badge">${escapeHtml(room.status || 'Aktiv')}</span>
+        ${image}
+        <div class="room-list-primary"><strong>${escapeHtml(room.name)}</strong><span>${escapeHtml(siteFor(room))} · ${escapeHtml(roomLocation(room))}</span></div>
+        <div class="room-list-category"><span>Kategorie</span><strong>${escapeHtml(room.category || 'Meetingraum')}</strong></div>
+        <div class="room-list-owner"><span>Verantwortlich</span><strong>${escapeHtml(room.owner)}</strong></div>
+        <div class="room-list-tickets"><span>Tickets</span><strong>${escapeHtml(ticketLabel(room))}</strong></div>
+        <span class="status-badge ${statusClass(room.status)}">${escapeHtml(room.status || 'Aktiv')}</span>
         <span class="room-list-arrow" aria-hidden="true">›</span>`;
       list.appendChild(row);
     });
