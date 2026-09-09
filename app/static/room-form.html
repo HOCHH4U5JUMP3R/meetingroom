@@ -187,6 +187,8 @@ const title =
     document.querySelector('#pageTitle');
 
 
+const field = name => form.elements.namedItem(name);
+
 const fields = [
     'name',
     'site',
@@ -207,16 +209,16 @@ const fields = [
 
 
 function updateAreaPreview() {
-    const length = Number(form.elements.length.value);
-    const width = Number(form.elements.width.value);
+    const length = Number(field('length').value);
+    const width = Number(field('width').value);
     const preview = document.querySelector('#areaPreview');
     preview.textContent = length > 0 && width > 0
         ? `${(length * width).toLocaleString('de-DE', { maximumFractionDigits: 2 })} m²`
         : 'Wird aus Länge × Breite berechnet';
 }
 
-form.elements.length.addEventListener('input', updateAreaPreview);
-form.elements.width.addEventListener('input', updateAreaPreview);
+field('length').addEventListener('input', updateAreaPreview);
+field('width').addEventListener('input', updateAreaPreview);
 
 async function loadRoom() {
 
@@ -239,7 +241,7 @@ async function loadRoom() {
     for (const field of fields) {
 
         const input =
-            form.elements[field];
+            form.elements.namedItem(field);
 
         if (input) {
             input.value =
@@ -262,7 +264,7 @@ form.onsubmit = async event => {
     for (const field of fields) {
 
         const input =
-            form.elements[field];
+            form.elements.namedItem(field);
 
         if (!input) {
             continue;
@@ -338,7 +340,7 @@ form.onsubmit = async event => {
     const saved =
         await response.json();
 
-    const image = form.elements.roomImageFile.files[0];
+    const image = field('roomImageFile').files[0];
     if (image) {
         const imageData = new FormData();
         imageData.append('file', image);
@@ -359,7 +361,7 @@ document.querySelector('#cancel').onclick =
     () => {
 
         window.location.href =
-            '/static/index.html';
+            roomId ? `/static/room-detail.html?id=${roomId}` : '/static/index.html';
 
     };
 
