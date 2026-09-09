@@ -1,7 +1,8 @@
 from pathlib import Path
+from uuid import uuid4
 from datetime import date
 from typing import Literal, Optional
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, File, UploadFile
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -34,6 +35,9 @@ class Room(Base):
     connections: Mapped[str] = mapped_column(Text, default='')
     owner: Mapped[str] = mapped_column(String(200), default='')
     host_name: Mapped[str] = mapped_column(String(200), default='')
+    inventory_number: Mapped[str] = mapped_column(String(120), default='')
+    mac_address: Mapped[str] = mapped_column(String(32), default='')
+    documents = relationship('EquipmentDocument', cascade='all, delete-orphan')
     notes: Mapped[str] = mapped_column(Text, default='')
     status: Mapped[str] = mapped_column(String(50), default='Aktiv')
     last_modernization: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
@@ -57,7 +61,18 @@ class Equipment(Base):
     purchase_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     purchase_price: Mapped[float] = mapped_column(Float, default=0)
     host_name: Mapped[str] = mapped_column(String(200), default='')
+    inventory_number: Mapped[str] = mapped_column(String(120), default='')
+    mac_address: Mapped[str] = mapped_column(String(32), default='')
+    documents = relationship('EquipmentDocument', cascade='all, delete-orphan')
     notes: Mapped[str] = mapped_column(Text, default='')
+
+class EquipmentDocument(Base):
+    __tablename__ = 'equipment_documents'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    equipment_id: Mapped[int] = mapped_column(ForeignKey('equipment.id', ondelete='CASCADE'), index=True)
+    kind: Mapped[str] = mapped_column(String(20))
+    filename: Mapped[str] = mapped_column(String(255))
+    stored_name: Mapped[str] = mapped_column(String(255))
 
 class BookingRule(Base):
     __tablename__ = 'booking_rules'
@@ -130,9 +145,16 @@ with engine.begin() as connection:
         connection.exec_driver_sql('ALTER TABLE equipment ADD COLUMN purchase_price FLOAT DEFAULT 0')
     if 'host_name' not in columns:
         connection.exec_driver_sql("ALTER TABLE equipment ADD COLUMN host_name VARCHAR(200) DEFAULT ''")
+    if 'inventory_number' not in columns:
+        connection.exec_driver_sql("ALTER TABLE equipment ADD COLUMN inventory_number VARCHAR(120) DEFAULT ''")
+    if 'mac_address' not in columns:
+        connection.exec_driver_sql("ALTER TABLE equipment ADD COLUMN mac_address VARCHAR(32) DEFAULT ''")
 
 app = FastAPI(title='Meetingraumverwaltung', version='1.0.0')
 app.mount('/static', StaticFiles(directory=BASE/'app'/'static'), name='static')
+UPLOADS = DATA / 'uploads'
+UPLOADS.mkdir(exist_ok=True)
+app.mount('/uploads', StaticFiles(directory=UPLOADS), name='uploads')
 
 def db():
     s=SessionLocal()
@@ -156,7 +178,7 @@ def health(): return {'status': 'ok'}
 
 @app.get('/api/rooms')
 def rooms(db:Session=Depends(db)):
-    return [dump(x) for x in db.scalars(select(Room).order_by(Room.site,Room.building,Room.floor,Room.name)).all()]
+    return [dict(dump(x), planned_budget=sum(project.budget or 0 for project in x.projects), spent=sum(project.actual_cost or 0 for project in x.projects) + sum(item.purchase_price or 0 for item in x.equipment)) for x in db.scalars(select(Room).order_by(Room.site,Room.building,Room.floor,Room.name)).all()]
 
 @app.get('/api/rooms/{room_id}')
 def room_detail(room_id:int, db:Session=Depends(db)):
@@ -165,7 +187,7 @@ def room_detail(room_id:int, db:Session=Depends(db)):
     data=dump(r)
     data['area']=round((r.length or 0)*(r.width or 0),2) if r.length and r.width else None
     data['volume']=round((r.length or 0)*(r.width or 0)*(r.height or 0),2) if r.length and r.width and r.height else None
-    data['equipment']=[dump(x) for x in r.equipment]
+    data['equipment']=[dict(dump(x), documents=[dict(dump(doc), url=f'/uploads/{x.id}/{doc.stored_name}') for doc in x.documents]) for x in r.equipment]
     data['rules']=[dump(x) for x in r.rules]
     data['modernizations']=[dump(x) for x in r.projects]
     data['tickets']=[dump(x) for x in sorted(r.tickets,key=lambda x:x.id,reverse=True)]
@@ -225,7 +247,10 @@ def budget_overview(year:Optional[int]=None, quarter:Optional[int]=None, month:O
     overall_budget = configured.get((None, selected_year), settings.overall_budget if settings and selected_year == date.today().year else 0)
     total = {'budget': overall_budget, 'planned': sum(item['planned'] for item in sites), 'spent': sum(item['spent'] for item in sites)}
     total['available'] = total['budget'] - total['planned'] - sum(item['equipment_spent'] for item in sites)
-    return {'year': selected_year, 'quarter': quarter, 'month': month, 'years': budget_years(db), 'total': total, 'sites': sites}
+    da_sites = {'Frankfurt', 'Rostock', 'Nürnberg', 'Überlingen', 'Toulouse'}
+    for entry in sites: entry['division'] = 'DA' if entry['site'] in da_sites else 'DAv'
+    divisions = [{'division': division, 'budget': sum(item['budget'] for item in sites if item['division'] == division), 'planned': sum(item['planned'] for item in sites if item['division'] == division), 'spent': sum(item['spent'] for item in sites if item['division'] == division), 'available': sum(item['available'] for item in sites if item['division'] == division)} for division in ['DA', 'DAv']]
+    return {'year': selected_year, 'quarter': quarter, 'month': month, 'years': budget_years(db), 'total': total, 'sites': sites, 'divisions': divisions}
 
 class BudgetAmountIn(BaseModel):
     budget: float = 0
@@ -262,7 +287,7 @@ def dashboard(db:Session=Depends(db)):
 class RoomIn(BaseModel):
     name:str; site:str=''; building:str=''; floor:str=''; room_number:str=''; length:Optional[float]=None; width:Optional[float]=None; height:Optional[float]=None; seats:Optional[int]=None; specialty:str=''; category:str=''; outlook_resource:str=''; connections:str=''; owner:str=''; host_name:str=''; notes:str=''; status:str='Aktiv'; last_modernization:Optional[date]=None
 class EquipmentIn(BaseModel):
-    name:str; category:Literal['Monitor','VC-System','Mikrofon','Lautsprecher','Zubehör']='Monitor'; manufacturer:str=''; model:str=''; serial:str=''; size_inches:Optional[float]=None; mounting:str=''; status:str='Aktiv'; purchase_date:Optional[date]=None; purchase_price:float=0; host_name:str=''; notes:str=''
+    name:str; category:Literal['Monitor','VC-System','Mikrofon','Lautsprecher','Zubehör']='Monitor'; manufacturer:str=''; model:str=''; serial:str=''; size_inches:Optional[float]=None; mounting:str=''; status:str='Aktiv'; purchase_date:Optional[date]=None; purchase_price:float=0; host_name:str=''; inventory_number:str=''; mac_address:str=''; notes:str=''
 class RuleIn(BaseModel):
     entitlement:str='Alle Mitarbeiter'; group_name:str=''; approval_required:bool=False; approver:str=''; approval_type:str='Keine Genehmigung'; notes:str=''
 class ModernizationIn(BaseModel):
@@ -280,6 +305,27 @@ def update_room(rid:int,x:RoomIn,db:Session=Depends(db)):
     if not r: raise HTTPException(404,'Raum nicht gefunden')
     for k,v in x.model_dump().items(): setattr(r,k,v)
     db.commit(); db.refresh(r); return dump(r)
+
+@app.delete('/api/rooms/{rid}')
+def delete_room(rid:int, db:Session=Depends(db)):
+    room = db.get(Room, rid)
+    if not room: raise HTTPException(404, 'Raum nicht gefunden')
+    db.delete(room); db.commit(); return {'ok': True}
+
+@app.post('/api/equipment/{equipment_id}/documents')
+async def upload_equipment_document(equipment_id:int, kind:str, file:UploadFile=File(...), db:Session=Depends(db)):
+    if kind not in ['offer', 'invoice', 'image']: raise HTTPException(400, 'Ungültiger Dokumenttyp')
+    equipment = db.get(Equipment, equipment_id)
+    if not equipment: raise HTTPException(404, 'Ausstattung nicht gefunden')
+    filename = Path(file.filename or '').name
+    if not filename: raise HTTPException(400, 'Datei fehlt')
+    directory = UPLOADS / str(equipment_id); directory.mkdir(parents=True, exist_ok=True)
+    stored_name = f'{uuid4().hex}_{filename}'
+    content = await file.read()
+    (directory / stored_name).write_bytes(content)
+    document = EquipmentDocument(equipment_id=equipment_id, kind=kind, filename=filename, stored_name=stored_name)
+    db.add(document); db.commit(); db.refresh(document)
+    return dict(dump(document), url=f'/uploads/{equipment_id}/{stored_name}')
 
 @app.post('/api/rooms/{rid}/{kind}')
 def create_child(rid:int,kind:str,payload:dict,db:Session=Depends(db)):

@@ -72,7 +72,7 @@ function renderRooms() {
       row.innerHTML = `
         <div><strong>${escapeHtml(room.name)}</strong><span>${escapeHtml(roomLocation(room))}</span></div>
         <div class="room-list-category">${escapeHtml(room.category || 'Meetingraum')}</div>
-        <div class="room-list-seats">${room.seats != null ? `${escapeHtml(room.seats)} Plätze` : '–'}</div>
+        <div class="room-list-seats">${room.seats != null ? `${escapeHtml(room.seats)} Plätze` : '–'}</div><div class="room-list-budget">Budget: ${Number(room.planned_budget || 0).toLocaleString('de-DE', {style:'currency', currency:'EUR', maximumFractionDigits:0})}</div>
         <span class="status-badge">${escapeHtml(room.status || 'Aktiv')}</span>
         <span class="room-list-arrow" aria-hidden="true">›</span>`;
       list.appendChild(row);

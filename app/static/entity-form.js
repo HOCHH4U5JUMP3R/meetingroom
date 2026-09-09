@@ -55,8 +55,19 @@ form.addEventListener('submit', async event => {
     message(error.detail || 'Speichern fehlgeschlagen.');
     return;
   }
-  window.location.href = '/';
+  const saved = await response.json();
+  if (config.kind === 'equipment') {
+    for (const [field, kind] of [['offerFile', 'offer'], ['invoiceFile', 'invoice'], ['imageFile', 'image']]) {
+      const file = form.elements[field]?.files?.[0];
+      if (!file) continue;
+      const upload = new FormData();
+      upload.append('file', file);
+      const uploadResponse = await fetch(`/api/equipment/${saved.id}/documents?kind=${kind}`, { method: 'POST', body: upload });
+      if (!uploadResponse.ok) { message('Gerät gespeichert, aber mindestens eine Datei konnte nicht hochgeladen werden.'); return; }
+    }
+  }
+  window.location.href = `/static/room-detail.html?id=${roomId}`;
 });
 
-document.querySelector('#cancel').addEventListener('click', () => window.location.href = '/');
+document.querySelector('#cancel').addEventListener('click', () => window.location.href = `/static/room-detail.html?id=${roomId}`);
 loadEntry().catch(error => message(error.message));

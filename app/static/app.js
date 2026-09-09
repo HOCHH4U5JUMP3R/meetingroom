@@ -232,27 +232,8 @@ function renderRoomData() {
             : null;
 
 
-    const areaM2 =
-        r.length && r.width
-            ? `${(
-                Number(r.length) *
-                Number(r.width)
-            ).toFixed(1)} m²`
-            : null;
-
-
-    const volume =
-        r.length &&
-        r.width &&
-        r.height
-
-            ? `${(
-                Number(r.length) *
-                Number(r.width) *
-                Number(r.height)
-            ).toFixed(1)} m³`
-
-            : null;
+    const areaM2 = r.area != null ? `${Number(r.area).toLocaleString('de-DE')} m²` : null;
+    const formatDate = value => value ? new Date(`${value}T00:00:00`).toLocaleDateString('de-DE') : null;
 
 
     const data = [
@@ -277,8 +258,6 @@ function renderRoomData() {
 
         ["Fläche", areaM2],
 
-        ["Volumen", volume],
-
         ["Raumkategorie", r.category],
 
         ["Raumverantwortlicher", r.owner],
@@ -298,7 +277,7 @@ function renderRoomData() {
         ],
 
         ["Letzte Modernisierung",
-            r.last_modernization
+            formatDate(r.last_modernization)
         ]
 
     ];
@@ -453,8 +432,8 @@ function renderEquipment() {
     const rows = Object.keys(byYear).sort().reverse().map(year => `
         <tr class="equipment-year"><td colspan="9">${esc(year)}</td></tr>
         ${byYear[year].map(item => `<tr>
-          <td><div class="primary-text">${esc(item.name)}</div>${item.serial ? `<div class="secondary-text">S/N ${esc(item.serial)}</div>` : ""}</td>
-          <td>${esc(item.category)}</td><td>${esc(item.manufacturer)}</td><td>${esc(item.model)}</td>
+          <td><div class="primary-text">${esc(item.name)}</div>${item.serial ? `<div class="secondary-text">S/N ${esc(item.serial)}</div>` : ""}${(item.documents || []).length ? `<div class="secondary-text">${(item.documents || []).filter(doc => doc.kind !== 'image').map(doc => `<a href="${esc(doc.url)}" target="_blank" rel="noopener">${esc(doc.kind)}: ${esc(doc.filename)}</a>`).join(" · ")}</div>${(item.documents || []).filter(doc => doc.kind === 'image').map(doc => `<img class="equipment-image" src="${esc(doc.url)}" alt="Modellbild ${esc(item.name)}">`).join("")}` : ""}</td>
+          <td>${esc(item.category)}</td><td>${esc(item.manufacturer)}</td><td>${esc(item.model)}${item.inventory_number ? `<div class="secondary-text">Inventar: ${esc(item.inventory_number)}</div>` : ""}${item.mac_address ? `<div class="secondary-text">MAC: ${esc(item.mac_address)}</div>` : ""}</td>
           <td>${item.size_inches ? `${esc(item.size_inches)}"` : "–"}</td><td>${esc(item.mounting)}</td><td>${euro(item.purchase_price)}</td><td>${badge(item.status || "Aktiv")}</td>
           <td><div class="actions"><button type="button" onclick="editEquipment(${item.id})">Bearb.</button><button type="button" onclick="deleteItem('equipment', ${item.id})">Löschen</button></div></td>
         </tr>`).join("")}`).join("");
@@ -925,6 +904,15 @@ $("#editRoom").addEventListener(
             `/static/room-form.html?id=${current.id}`;
     }
 );
+
+
+$("#deleteRoom").addEventListener("click", async () => {
+    if (!current || !confirm(`Raum „${current.name}“ wirklich löschen?`)) return;
+    try {
+        await api(`/api/rooms/${current.id}`, { method: "DELETE" });
+        window.location.href = "/";
+    } catch (error) { alert(`Löschen fehlgeschlagen: ${error.message}`); }
+});
 
 
 $("#addEquipment").addEventListener(
