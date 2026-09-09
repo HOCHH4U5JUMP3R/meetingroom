@@ -8,7 +8,7 @@
 
     <title>Raum bearbeiten</title>
 
-    <link rel="stylesheet" href="/static/style.css?v=3">
+    <link rel="stylesheet" href="/static/style.css?v=18">
 
 </head>
 
@@ -94,16 +94,13 @@
                 </div>
 
                 <div class="field">
-                    <label>Höhe (m)</label>
-                    <input
-                        name="height"
-                        type="number"
-                        step="0.01">
+                    <label>Raumgröße</label>
+                    <output id="areaPreview" class="calculated-value">Wird aus Länge × Breite berechnet</output>
                 </div>
 
                 <div class="field">
                     <label>Raumkategorie</label>
-                    <input name="category">
+                    <select name="category"><option value="">Bitte wählen</option><option>Besprechungsraum</option><option>VK-Klein</option><option>VK-Mittel</option><option>VK-Groß</option><option>Spezial</option></select>
                 </div>
 
                 <div class="field">
@@ -127,6 +124,12 @@
                     <label><input name="connections_choice" value="HDMI" type="checkbox"> HDMI</label>
                     <label><input name="connections_choice" value="USB-C" type="checkbox"> USB-C</label>
                 </fieldset>
+
+                <div class="field full">
+                    <label>Raumbild</label>
+                    <input name="roomImageFile" type="file" accept="image/*">
+                    <span class="field-hint">Ein Bild des Raums wird auf der Raumakte angezeigt.</span>
+                </div>
 
                 <div class="field full">
                     <label>Raum-Besonderheiten</label>
@@ -184,6 +187,8 @@ const title =
     document.querySelector('#pageTitle');
 
 
+const field = name => form.elements.namedItem(name);
+
 const fields = [
     'name',
     'site',
@@ -193,7 +198,6 @@ const fields = [
     'seats',
     'length',
     'width',
-    'height',
     'category',
     'owner',
     'outlook_resource',
@@ -203,6 +207,18 @@ const fields = [
     'last_modernization'
 ];
 
+
+function updateAreaPreview() {
+    const length = Number(field('length').value);
+    const width = Number(field('width').value);
+    const preview = document.querySelector('#areaPreview');
+    preview.textContent = length > 0 && width > 0
+        ? `${(length * width).toLocaleString('de-DE', { maximumFractionDigits: 2 })} m²`
+        : 'Wird aus Länge × Breite berechnet';
+}
+
+field('length').addEventListener('input', updateAreaPreview);
+field('width').addEventListener('input', updateAreaPreview);
 
 async function loadRoom() {
 
@@ -225,7 +241,7 @@ async function loadRoom() {
     for (const field of fields) {
 
         const input =
-            form.elements[field];
+            form.elements.namedItem(field);
 
         if (input) {
             input.value =
@@ -233,6 +249,7 @@ async function loadRoom() {
         }
     }    const connections = String(room.connections || '').split(' · ');
     form.querySelectorAll('[name="connections_choice"]').forEach(input => { input.checked = connections.includes(input.value); });
+    updateAreaPreview();
 }
 
 
@@ -247,7 +264,7 @@ form.onsubmit = async event => {
     for (const field of fields) {
 
         const input =
-            form.elements[field];
+            form.elements.namedItem(field);
 
         if (!input) {
             continue;
@@ -269,7 +286,7 @@ form.onsubmit = async event => {
 
 
         if (
-            ['length', 'width', 'height']
+            ['length', 'width']
                 .includes(field)
         ) {
             value =
@@ -323,6 +340,17 @@ form.onsubmit = async event => {
     const saved =
         await response.json();
 
+    const image = field('roomImageFile').files[0];
+    if (image) {
+        const imageData = new FormData();
+        imageData.append('file', image);
+        const imageResponse = await fetch(`/api/rooms/${saved.id}/image`, { method: 'POST', body: imageData });
+        if (!imageResponse.ok) {
+            const error = await imageResponse.json();
+            alert(error.detail || 'Raumbild konnte nicht hochgeladen werden');
+            return;
+        }
+    }
 
     window.location.href =
         `/static/room-detail.html?id=${saved.id}`;
@@ -333,11 +361,12 @@ document.querySelector('#cancel').onclick =
     () => {
 
         window.location.href =
-            '/static/index.html';
+            roomId ? `/static/room-detail.html?id=${roomId}` : '/static/index.html';
 
     };
 
 
+updateAreaPreview();
 loadRoom();
 
 </script>
