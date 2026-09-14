@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Meetingraumverwaltung</title>
-    <link rel="stylesheet" href="/static/style.css?v=18">
+    <link rel="stylesheet" href="/static/style.css?v=21">
 </head>
 <body>
 <header class="topbar">
@@ -12,7 +12,7 @@
     <button id="newRoom" type="button" class="btn btn-primary">＋ Neuer Raum</button>
 </header>
 <main>
-    <a href="/" class="btn">← Zur Übersicht</a>
+    <a href="/" class="btn room-back-link">← Zur Übersicht</a>
     <section id="empty" class="empty-state"><div class="empty-icon">⌂</div><h2>Kein Meetingraum ausgewählt</h2><p>Öffne einen Raum über die Standortübersicht, um die vollständige Raumakte zu sehen.</p></section>
     <div id="app" hidden>
         <section class="room-header">
@@ -21,9 +21,12 @@
                 <div class="room-title-row"><h2 id="roomTitle">–</h2><span id="roomStatus" class="status-badge">–</span></div>
                 <div id="roomSubtitle" class="room-subtitle">–</div>
             </div>
-            <img id="roomImage" class="room-image" alt="Raumbild" hidden>
             <div class="room-actions"><button id="editRoom" type="button" class="btn">Bearbeiten</button></div>
         </section>
+
+        <figure id="roomImagePanel" class="room-image-panel" hidden>
+            <img id="roomImage" class="room-image" alt="Raumbild">
+        </figure>
 
         <section class="two-column top-grid">
             <article class="panel">
@@ -54,6 +57,6 @@
         <div class="room-danger-zone"><button id="deleteRoom" type="button" class="btn btn-danger">Raum löschen</button></div>
     </div>
 </main>
-<script src="/static/app.js?v=18"></script>
+<script src="/static/app.js?v=21"></script>
 </body>
 </html>

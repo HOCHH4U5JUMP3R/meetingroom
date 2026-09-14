@@ -209,7 +209,7 @@ function renderRoom() {
 
 
     const roomImage = $("#roomImage");
-    roomImage.hidden = !r.image_url;
+    $("#roomImagePanel").hidden = !r.image_url;
     roomImage.src = r.image_url || "";
 
     renderRoomData();
@@ -261,12 +261,12 @@ function renderRoomData() {
             r.connections
         ],
 
-        ["Besonderheit",
-            r.specialty
-        ],
-
         ["Letzte Modernisierung",
             formatDate(r.last_modernization)
+        ],
+
+        ["Besonderheit",
+            r.specialty
         ]
 
     ];
@@ -658,13 +658,11 @@ function renderTickets() {
                     </div>
 
 
-                    <div>
+                    <div class="ticket-actions">
 
                         ${badge(item.status || "Offen")}
 
-                        <div
-                            class="actions"
-                            style="margin-top:4px">
+                        <div class="actions">
 
                             <button
                                 type="button"
