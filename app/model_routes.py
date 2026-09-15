@@ -1,9 +1,8 @@
 from pathlib import Path
 from uuid import uuid4
 from fastapi import Depends, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from sqlalchemy import Boolean, ForeignKey, Integer, String, Text, Float, select
+from sqlalchemy import Boolean, ForeignKey, Integer, String, Text, Float, select, func
 from sqlalchemy.orm import Mapped, mapped_column, Session
 from . import main
 
@@ -53,8 +52,33 @@ def model_dump(m):
 @app.get('/api/equipment-models')
 def equipment_models(db: Session = Depends(main.db)):
     models = db.scalars(select(EquipmentModel).order_by(EquipmentModel.manufacturer, EquipmentModel.name)).all()
-    counts = {x.model_id: x.count for x in db.execute(select(EquipmentModelAssignment.model_id, __import__('sqlalchemy').func.count(EquipmentModelAssignment.id).label('count')).group_by(EquipmentModelAssignment.model_id)).all()}
+    counts = {x.model_id: x.count for x in db.execute(select(EquipmentModelAssignment.model_id, func.count(EquipmentModelAssignment.id).label('count')).group_by(EquipmentModelAssignment.model_id)).all()}
     return [{**model_dump(m), 'equipment_count': counts.get(m.id, 0)} for m in models]
+
+@app.get('/api/equipment-models/stats')
+def equipment_model_stats(db: Session = Depends(main.db)):
+    model_count = db.scalar(select(func.count(EquipmentModel.id))) or 0
+    manufacturer_count = db.scalar(select(func.count(func.distinct(EquipmentModel.manufacturer))).where(EquipmentModel.manufacturer != '')) or 0
+    equipment_count = db.scalar(select(func.count(Equipment.id))) or 0
+    assigned_count = db.scalar(select(func.count(EquipmentModelAssignment.id))) or 0
+    return {
+        'models': model_count,
+        'manufacturers': manufacturer_count,
+        'equipment': equipment_count,
+        'assigned': assigned_count,
+        'coverage': round(assigned_count / equipment_count * 100, 1) if equipment_count else 0,
+    }
+
+@app.get('/api/equipment-catalog')
+def equipment_catalog(db: Session = Depends(main.db)):
+    rows = db.execute(
+        select(EquipmentModelAssignment.equipment_id, EquipmentModel)
+        .join(EquipmentModel, EquipmentModel.id == EquipmentModelAssignment.model_id)
+    ).all()
+    return [
+        {'equipment_id': equipment_id, 'model': model_dump(model)}
+        for equipment_id, model in rows
+    ]
 
 @app.post('/api/equipment-models')
 def create_equipment_model(payload: ModelIn, db: Session = Depends(main.db)):
