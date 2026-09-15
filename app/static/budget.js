@@ -4,8 +4,6 @@
     year: $('#budgetYear'),
     quarter: $('#budgetQuarter'),
     month: $('#budgetMonth'),
-    globalForm: $('#globalBudgetForm'),
-    globalInput: $('#globalBudget'),
     totals: $('#budgetTotals'),
     divisions: $('#divisionTotals'),
     sites: $('#siteBudgets'),
@@ -54,6 +52,21 @@
 
   function moneyLine(label, value, className = '') {
     return `<div class="budget-metric ${className}"><span>${esc(label)}</span><strong>${money(value)}</strong></div>`;
+  }
+
+  // The total budget is deliberately derived from the individual site budgets.
+  // Hamburg appears twice in the API (50 % DA + 50 % DAv), so summing the
+  // allocated rows still counts the Hamburg budget exactly once.
+  function deriveTotalBudget(data) {
+    return (data.sites || []).reduce((sum, site) => sum + Number(site.budget || 0), 0);
+  }
+
+  function normalizeTotal(data) {
+    const t = data.total || {};
+    t.budget = deriveTotalBudget(data);
+    t.available = t.budget - Number(t.committed || 0);
+    t.utilization = t.budget ? Number(t.committed || 0) / t.budget * 100 : 0;
+    data.total = t;
   }
 
   function renderControlling(data) {
@@ -117,24 +130,33 @@
       html += group.map((s) => {
         const hamburg = siteKey(s.site) === 'hamburg';
         const allocation = Number(s.allocation || 1);
-        return `<tr>
+        const canEdit = !hamburg || s.division === 'DA';
+        const inputValue = hamburg ? Number(s.budget || 0) / allocation : Number(s.budget || 0);
+        const input = `<input class="site-budget-input" data-site="${encodeURIComponent(s.site)}" data-allocation="${allocation}" type="number" min="0" step="0.01" value="${inputValue || ''}" ${canEdit ? '' : 'disabled'}>`;
+        const note = hamburg
+          ? `<small class="site-edit-note">${canEdit ? 'Eingabe gilt für Hamburg gesamt · automatisch 50 % / 50 %' : 'Wird aus dem Hamburg-Gesamtbudget berechnet'}</small>`
+          : '';
+        return `<tr class="${hamburg ? 'hamburg-row' : ''}">
           <td><div class="site-name"><span class="division-pill ${s.division === 'DA' ? 'da' : 'dav'}">${s.division === 'DA' ? 'DAs' : 'DAv'}</span><strong>${esc(s.site)}</strong></div><small>${s.rooms || 0} Räume · ${percent(s.utilization)} gebunden${allocation < 1 ? ' · 50 % Anteil' : ''}</small></td>
           <td>${s.rooms || 0}</td>
-          <td><input class="site-budget-input" data-site="${encodeURIComponent(s.site)}" type="number" min="0" step="0.01" value="${s.budget || ''}" ${hamburg ? 'disabled' : ''}></td>
+          <td>${input}${note}</td>
           <td>${money(s.modernization_planned)}</td><td>${money(s.committed)}</td><td>${money(s.spent)}</td><td>${money(s.forecast)}</td><td>${money(s.available)}</td>
-          <td>${hamburg ? '<small>50 % DA / 50 % DAv</small>' : `<button class="btn btn-small site-save" data-site="${encodeURIComponent(s.site)}">Speichern</button>`}</td>
+          <td>${canEdit ? `<button class="btn btn-small site-save" data-site="${encodeURIComponent(s.site)}">Speichern</button>` : '<small>automatisch</small>'}</td>
         </tr>`;
       }).join('');
     });
 
     els.sites.innerHTML = html || '<tr><td colspan="9">Keine Standorte für den gewählten Filter.</td></tr>';
     els.sites.querySelectorAll('.site-save').forEach((button) => button.addEventListener('click', async () => {
-      const input = button.closest('tr').querySelector('.site-budget-input');
+      const row = button.closest('tr');
+      const input = row.querySelector('.site-budget-input');
+      const site = decodeURIComponent(button.dataset.site);
       try {
         button.disabled = true;
         button.textContent = 'Speichern …';
-        await api(`/api/budget-overview/sites/${encodeURIComponent(decodeURIComponent(button.dataset.site))}?year=${encodeURIComponent(data.year)}`, {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ budget: Number(input.value) || 0 })
+        const value = Number(input.value) || 0;
+        await api(`/api/budget-overview/sites/${encodeURIComponent(site)}?year=${encodeURIComponent(data.year)}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ budget: value })
         });
         await load();
       } catch (e) {
@@ -147,12 +169,13 @@
 
   function render(data) {
     currentData = data;
+    normalizeTotal(data);
     clearError();
     if (!els.year.options.length) {
       (data.years || []).forEach((year) => els.year.add(new Option(year, year)));
     }
     els.year.value = String(data.year);
-    els.globalInput.value = data.total?.budget || '';
+
     $('#budgetKpi').textContent = money(data.total?.budget);
     $('#plannedKpi').textContent = money(data.total?.committed);
     $('#spentKpi').textContent = money(data.total?.spent);
@@ -166,7 +189,7 @@
     const forecastGap = Number(t.budget || 0) - Number(t.forecast || 0);
     els.totals.innerHTML = `
       <div class="budget-hero-grid">
-        ${moneyLine('Jahresbudget', t.budget)}
+        ${moneyLine('Automatisches Gesamtbudget', t.budget, 'strong')}
         ${moneyLine('Modernisierung geplant', t.modernization_planned)}
         ${moneyLine('Modernisierung beauftragt', t.modernization_committed)}
         ${moneyLine('Modernisierung Ist', t.modernization_actual)}
@@ -177,7 +200,7 @@
         ${moneyLine('Verfügbar', t.available, 'strong')}
       </div>
       <div class="budget-progress"><span style="width:${Math.min(100, Number(t.utilization) || 0)}%"></span></div>
-      <small>${percent(t.utilization)} Budgetbindung · Equipmentkäufe werden sofort als Ist und gebunden berücksichtigt.</small>`;
+      <small>${percent(t.utilization)} Budgetbindung · Summe der Standortbudgets · Hamburg wird einmalig mit seinem Gesamtbudget gezählt.</small>`;
   }
 
   async function load() {
@@ -190,20 +213,6 @@
       console.error('Budget load failed', e);
     }
   }
-
-  els.globalForm.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    try {
-      const year = els.year.value || new Date().getFullYear();
-      const budget = Number(els.globalInput.value) || 0;
-      const data = await api(`/api/budget-overview?year=${encodeURIComponent(year)}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ budget })
-      });
-      render(data);
-    } catch (e) {
-      showError(`Gesamtbudget konnte nicht gespeichert werden: ${e.message}`);
-    }
-  });
 
   els.year.addEventListener('change', load);
   els.quarter.addEventListener('change', load);
