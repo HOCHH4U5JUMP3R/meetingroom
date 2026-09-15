@@ -1,10 +1,213 @@
-(()=>{const css=`.budget-summary{padding:20px 22px}.budget-hero-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.budget-metric{padding:13px;border:1px solid var(--line);border-radius:11px;background:var(--surface2)}.budget-metric span{display:block;color:var(--muted);font-size:9px}.budget-metric strong{display:block;font-size:16px;margin-top:4px}.budget-metric.strong{background:var(--primary-soft);border-color:#bfdbfe}.budget-progress,.division-bar{height:7px;background:#edf1f5;border-radius:8px;overflow:hidden;margin:18px 0 7px}.budget-progress span,.division-bar span{display:block;height:100%;background:var(--primary);border-radius:8px}.division-summary{padding:18px 22px}.division-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.division-card{border:1px solid var(--line);border-radius:13px;padding:17px;background:var(--surface2);cursor:pointer;transition:.15s}.division-card:hover{transform:translateY(-1px);box-shadow:var(--shadow)}.division-card.selected{border-color:#93c5fd;box-shadow:0 0 0 2px #eff6ff}.division-head{display:flex;justify-content:space-between;gap:10px}.division-head strong{font-size:15px}.division-head span{font-size:9px;color:var(--muted)}.division-number{font-size:25px;font-weight:850;letter-spacing:-.04em;margin-top:10px}.division-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:12px}.division-stats span{font-size:9px;color:var(--muted)}.division-stats b{display:block;color:var(--text);font-size:10px;margin-top:2px}.site-group{margin:18px 0 8px;padding:10px 12px;border-radius:10px;background:var(--surface2);border:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}.site-group strong{font-size:12px}.site-group span{font-size:9px;color:var(--muted)}.site-name{display:flex;align-items:center;gap:8px}.site-name strong{font-size:11px}.site-name+small{display:block;color:var(--muted);margin-top:4px}.division-pill{display:inline-flex;padding:3px 6px;border-radius:6px;font-size:8px;font-weight:900}.division-pill.da{background:var(--primary-soft);color:var(--primary)}.division-pill.dav{background:#f2f4f7;color:#475467}.budget-table th,.budget-table td{vertical-align:middle}.site-budget-input{width:125px;padding:7px 8px;border:1px solid var(--line);border-radius:8px;background:#fff}.btn-small{min-height:30px;padding:5px 9px;font-size:9px}.budget-breakdown{margin-top:18px;border-top:1px solid var(--line);padding-top:18px}.budget-breakdown h3{margin:0 0 10px}.budget-note{color:var(--muted);font-size:10px}.cost-chip{display:inline-block;padding:3px 6px;border-radius:6px;background:#f2f4f7;font-size:9px;font-weight:700}.warning-value{color:var(--red)}.budget-ledger{padding:0 22px 22px}.ledger-grid{display:grid;gap:7px}.ledger-row{display:grid;grid-template-columns:90px 105px 1.4fr 1fr 130px;gap:12px;align-items:center;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface2)}.ledger-row small{display:block;color:var(--muted);font-size:9px;margin-top:2px}.ledger-row strong{font-size:11px}.ledger-row .amount{text-align:right;font-weight:850}.ledger-row.equipment{border-left:3px solid var(--primary)}.ledger-row.modernization{border-left:3px solid var(--orange)}.ledger-empty{padding:18px;border:1px dashed var(--line);border-radius:10px;color:var(--muted);font-size:10px}.controlling-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.control-card{padding:15px;border:1px solid var(--line);border-radius:12px;background:var(--surface2)}.control-card .label{font-size:9px;color:var(--muted)}.control-card strong{display:block;font-size:19px;margin-top:5px}.control-card small{display:block;color:var(--muted);font-size:9px;margin-top:4px}.control-card.plan{border-top:3px solid var(--primary)}.control-card.commit{border-top:3px solid var(--orange)}.control-card.actual{border-top:3px solid var(--green)}.control-card.forecast{border-top:3px solid #7c3aed}.control-gap{margin-top:12px;padding:12px;border-radius:10px;background:var(--surface2);font-size:10px}.control-gap strong{font-size:12px}.control-good{color:var(--green)}.control-bad{color:var(--red)}.control-track{height:10px;background:#edf1f5;border-radius:8px;overflow:hidden;margin:10px 0}.control-track span{display:block;height:100%;background:var(--primary);border-radius:8px}.site-budget-input:disabled{background:#f2f4f7;color:var(--muted)}@media(max-width:900px){.budget-hero-grid{grid-template-columns:repeat(2,1fr)}.division-grid{grid-template-columns:1fr}.division-stats{grid-template-columns:1fr 1fr}.controlling-grid{grid-template-columns:1fr 1fr}.ledger-row{grid-template-columns:80px 1fr 100px}}@media(max-width:600px){.budget-hero-grid{grid-template-columns:1fr}.division-stats,.controlling-grid{grid-template-columns:1fr}.site-budget-input{width:100px}.ledger-row{grid-template-columns:1fr}.ledger-row .amount{text-align:left}}`;const s=document.createElement('style');s.textContent=css;document.head.appendChild(s)})();
-const $=s=>document.querySelector(s),globalForm=$('#globalBudgetForm'),globalInput=$('#globalBudget'),totals=$('#budgetTotals'),divisionTotals=$('#divisionTotals'),sites=$('#siteBudgets'),error=$('#budgetError'),yearSelect=$('#budgetYear'),quarterSelect=$('#budgetQuarter'),monthSelect=$('#budgetMonth');let activeDivision='';let ledger=[];
-const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));const euro=v=>Number(v||0).toLocaleString('de-DE',{style:'currency',currency:'EUR',maximumFractionDigits:0});const pct=v=>`${Number(v||0).toLocaleString('de-DE',{maximumFractionDigits:1})}%`;const showError=m=>{error.textContent=m;error.hidden=false};
-function query(){const p=new URLSearchParams({year:yearSelect.value||new Date().getFullYear()});if(quarterSelect.value)p.set('quarter',quarterSelect.value);if(monthSelect.value)p.set('month',monthSelect.value);return p}async function save(url,budget){const r=await fetch(url,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({budget:Number(budget)||0})});if(!r.ok)throw Error('Speichern fehlgeschlagen.')}
-async function loadLedger(){const p=query();if(activeDivision)p.set('division',activeDivision);const r=await fetch(`/api/budget-ledger?${p}`);if(!r.ok)throw Error('Kostenledger konnte nicht geladen werden.');const d=await r.json();ledger=(d.rows||[]).map(x=>({type:x.type,date:x.date,site:x.site||'Ohne Standort',division:x.division,room:x.room,name:x.description,detail:x.category,amount:Number(x.amount)||0,status:x.status,state:x.financial_state}));renderLedger()}
-function renderLedger(){let box=document.querySelector('#budgetLedger');if(!box){box=document.createElement('div');box.id='budgetLedger';box.className='budget-ledger';const card=document.createElement('section');card.className='v2-card';card.innerHTML='<div class="v2-card-head"><div><div class="eyebrow">KOSTENTREIBER</div><h2>Kosten im Zeitraum</h2><p class="budget-note">Equipment = Ist. Modernisierung = Ist, sonst beauftragt, sonst geplant · Hamburg 50/50.</p></div></div>';card.appendChild(box);document.querySelector('.v2-main').appendChild(card)}const total=ledger.reduce((n,x)=>n+x.amount,0);if(!ledger.length){box.innerHTML='<div class="ledger-empty">Keine kostenrelevanten Vorgänge für den gewählten Zeitraum.</div>';return}box.innerHTML=`<div class="ledger-grid"><div class="budget-note" style="margin-bottom:6px">${ledger.length} Vorgänge · ${euro(total)} aktuelle Kosten-/Bindungsbasis</div>${ledger.map(x=>`<div class="ledger-row ${x.type}"><div><span class="division-pill ${x.division==='DA'?'da':'dav'}">${x.division}</span><small>${esc(x.date)}</small></div><div><strong>${esc(x.type==='equipment'?'Equipment':'Modernisierung')}</strong><small>${esc(x.site)}</small></div><div><strong>${esc(x.name)}</strong><small>${esc(x.room)} · ${esc(x.detail)}</small></div><div><span class="cost-chip">${esc(x.state||x.status||'Vorgang')}</span></div><div class="amount">${euro(x.amount)}</div></div>`).join('')}</div>`}
-function renderControlling(d){const total=d.total||{};const budget=Number(total.budget)||0;const planned=Number(total.modernization_planned)||0;const committed=Number(total.committed)||0;const actual=Number(total.spent)||0;const forecast=Number(total.forecast)||0;const gap=budget-forecast;const committedGap=forecast-committed;const planGap=planned-committed;const ratio=v=>budget?Math.min(100,Math.max(0,v/budget*100)):0;const cls=gap<0?'control-bad':'control-good';const box=$('#budgetControlling');if(!box)return;box.innerHTML=`<div class="controlling-grid"><div class="control-card plan"><span class="label">PLAN</span><strong>${euro(planned)}</strong><small>Modernisierungsbudget / geplante Maßnahmen</small></div><div class="control-card commit"><span class="label">AUFTRAG / GEBUNDEN</span><strong>${euro(committed)}</strong><small>Beauftragt + bereits gekauftes Equipment</small></div><div class="control-card actual"><span class="label">IST</span><strong>${euro(actual)}</strong><small>Tatsächlich ausgegeben</small></div><div class="control-card forecast"><span class="label">FORECAST</span><strong>${euro(forecast)}</strong><small>Erwarteter Jahresendstand</small></div></div><div class="control-gap"><strong>Forecast vs. Jahresbudget</strong><div class="control-track"><span style="width:${ratio(forecast)}%"></span></div><span class="${cls}">${euro(Math.abs(gap))} ${gap<0?'über dem Budget':'Puffer bis zum Budget'}</span> · ${pct(budget?forecast/budget*100:0)} des Jahresbudgets prognostiziert.</div><div class="control-gap"><strong>Was ist noch nicht gebunden?</strong> ${euro(Math.max(0,budget-committed))} sind aktuell nicht gebunden. ${planGap>0?`Geplante Maßnahmen liegen noch ${euro(planGap)} über dem bereits gebundenen Volumen.`:'Die aktuelle Beauftragung liegt auf bzw. über dem geplanten Modernisierungsvolumen.'} ${committedGap>0?`Davon werden zusätzlich ${euro(committedGap)} Forecast-Risiko aus noch nicht gebundenen/geplanten Maßnahmen.`:''}</div>`}
-function render(d){if(!yearSelect.options.length)(d.years||[]).forEach(y=>yearSelect.add(new Option(y,y)));yearSelect.value=String(d.year);globalInput.value=d.total.budget||'';$('#budgetKpi').textContent=euro(d.total.budget);$('#plannedKpi').textContent=euro(d.total.committed);$('#spentKpi').textContent=euro(d.total.spent);$('#availableKpi').textContent=euro(d.total.available);renderControlling(d);const forecastGap=d.total.budget-d.total.forecast;totals.innerHTML=`<div class="budget-hero-grid">${moneyLine('Jahresbudget',d.total.budget)}${moneyLine('Modernisierung geplant',d.total.modernization_planned)}${moneyLine('Modernisierung beauftragt',d.total.modernization_committed)}${moneyLine('Modernisierung Ist',d.total.modernization_actual)}${moneyLine('Equipment Ist',d.total.equipment_spent)}${moneyLine('Gesamt Ist',d.total.spent,'strong')}${moneyLine('Gesamt gebunden',d.total.committed)}${moneyLine('Forecast',d.total.forecast,forecastGap<0?'warning-value':'')}${moneyLine('Verfügbar',d.total.available,'strong')}</div><div class="budget-progress"><span style="width:${Math.min(100,d.total.utilization||0)}%"></span></div><small>${pct(d.total.utilization)} Budgetbindung · Equipmentkäufe sind Ist-Kosten; Modernisierungen werden getrennt nach geplant, beauftragt und Ist geführt.</small><div class="budget-breakdown"><h3>Finanzlogik ${esc(d.year)}</h3><div class="budget-note"><span class="cost-chip">Plan</span> Modernisierungsbudget · <span class="cost-chip">Auftrag</span> beauftragte Modernisierung + Equipmentkäufe · <span class="cost-chip">Ist</span> tatsächliche Modernisierungskosten + Equipmentkäufe · <span class="cost-chip">Forecast</span> höherer Wert aus Plan/Auftrag/Ist + Equipment.</div></div>`;divisionTotals.innerHTML=`<div class="division-grid">${(d.divisions||[]).map(g=>`<article class="division-card ${activeDivision===g.division?'selected':''}" data-division="${esc(g.division)}"><div class="division-head"><strong>${g.division==='DA'?'DAs':'DAv'}</strong><span>${g.sites} Standort-Zuordnungen · ${g.rooms} Räume</span></div><div class="division-number">${euro(g.budget)}</div><div class="division-bar"><span style="width:${Math.min(100,g.utilization||0)}%"></span></div><div class="division-stats"><span>Gebunden <b>${euro(g.committed)}</b></span><span>Ist <b>${euro(g.spent)}</b></span><span>Forecast <b>${euro(g.forecast)}</b></span><span>Frei <b>${euro(g.available)}</b></span></div></article>`).join('')}</div>`;document.querySelectorAll('.division-card').forEach(c=>c.onclick=()=>{activeDivision=activeDivision===c.dataset.division?'':c.dataset.division;render(d);loadLedger().catch(e=>showError(e.message))});const visible=(d.sites||[]).filter(x=>!activeDivision||x.division===activeDivision);const order=['DA','DAv'];let rowsHtml='';order.forEach(div=>{const group=visible.filter(x=>x.division===div);if(!group.length)return;rowsHtml+=`<tr><td colspan="9"><div class="site-group"><strong>${div==='DA'?'DAs':'DAv'} · ${group.length} Standort-Zuordnungen</strong><span>${group.map(x=>x.site).join(' · ')}</span></div></td></tr>`;rowsHtml+=group.map(x=>{const isHamburg=normalizeSiteName(x.site)==='hamburg';const editable=!isHamburg;return `<tr><td><div class="site-name"><span class="division-pill ${x.division==='DA'?'da':'dav'}">${x.division==='DA'?'DAs':'DAv'}</span><strong>${esc(x.site)}</strong></div><small>${x.rooms} Räume · ${pct(x.utilization)} gebunden${x.allocation<1?' · 50 % Anteil':''}</small></td><td>${x.rooms}</td><td><input class="site-budget-input" data-site="${encodeURIComponent(x.site)}" type="number" min="0" step="0.01" value="${x.budget||''}" ${editable?'':'disabled'}></td><td>${euro(x.modernization_planned)}</td><td>${euro(x.committed)}</td><td>${euro(x.spent)}</td><td>${euro(x.forecast)}</td><td><button class="btn btn-small site-save" data-site="${encodeURIComponent(x.site)}" ${editable?'':'disabled'}>${editable?'Speichern':'50 % Anteil'}</button></td></tr>`}).join('')});sites.innerHTML=rowsHtml||'<tr><td colspan="9">Keine Standorte für diese Auswahl.</td></tr>';document.querySelectorAll('.site-save:not(:disabled)').forEach(b=>b.onclick=async()=>{try{const site=decodeURIComponent(b.dataset.site),i=document.querySelector(`.site-budget-input[data-site="${b.dataset.site}"]`);await save(`/api/budget-overview/sites/${encodeURIComponent(site)}?year=${yearSelect.value}`,i.value);await load()}catch(e){showError(e.message)}})}
-function normalizeSiteName(v){return String(v||'').trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()}
-function moneyLine(label,value,cls=''){return `<div class="budget-metric ${cls}"><span>${esc(label)}</span><strong>${euro(value)}</strong></div>`}async function load(){error.hidden=true;const r=await fetch(`/api/budget-overview?${query()}`);if(!r.ok)throw Error('Budgetübersicht konnte nicht geladen werden.');const d=await r.json();render(d);await loadLedger()}globalForm.onsubmit=async e=>{e.preventDefault();try{await save(`/api/budget-overview/global?year=${yearSelect.value}`,globalInput.value);await load()}catch(x){showError(x.message)}};[yearSelect,quarterSelect,monthSelect].forEach(x=>x.onchange=()=>load().catch(e=>showError(e.message)));load().catch(e=>showError(e.message));
+(() => {
+  const $ = (selector) => document.querySelector(selector);
+  const els = {
+    year: $('#budgetYear'),
+    quarter: $('#budgetQuarter'),
+    month: $('#budgetMonth'),
+    globalForm: $('#globalBudgetForm'),
+    globalInput: $('#globalBudget'),
+    totals: $('#budgetTotals'),
+    divisions: $('#divisionTotals'),
+    sites: $('#siteBudgets'),
+    controlling: $('#budgetControlling'),
+    error: $('#budgetError')
+  };
+
+  let activeDivision = '';
+  let currentData = null;
+
+  const money = (value) => Number(value || 0).toLocaleString('de-DE', {
+    style: 'currency', currency: 'EUR', maximumFractionDigits: 0
+  });
+  const percent = (value) => `${Number(value || 0).toLocaleString('de-DE', { maximumFractionDigits: 1 })}%`;
+  const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+  }[c]));
+  const siteKey = (value) => String(value || '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+  function showError(message) {
+    if (!els.error) return;
+    els.error.textContent = message;
+    els.error.hidden = false;
+  }
+  function clearError() {
+    if (els.error) els.error.hidden = true;
+  }
+
+  function params() {
+    const p = new URLSearchParams();
+    p.set('year', els.year.value || new Date().getFullYear());
+    if (els.quarter.value) p.set('quarter', els.quarter.value);
+    if (els.month.value) p.set('month', els.month.value);
+    return p;
+  }
+
+  async function api(url, options) {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      let detail = '';
+      try { detail = (await response.json()).detail || ''; } catch (_) {}
+      throw new Error(detail || `HTTP ${response.status}`);
+    }
+    return response.json();
+  }
+
+  function moneyLine(label, value, className = '') {
+    return `<div class="budget-metric ${className}"><span>${esc(label)}</span><strong>${money(value)}</strong></div>`;
+  }
+
+  function renderControlling(data) {
+    if (!els.controlling) return;
+    const t = data.total || {};
+    const budget = Number(t.budget) || 0;
+    const planned = Number(t.modernization_planned) || 0;
+    const committed = Number(t.committed) || 0;
+    const actual = Number(t.spent) || 0;
+    const forecast = Number(t.forecast) || 0;
+    const gap = budget - forecast;
+    const ratio = budget ? Math.min(100, Math.max(0, forecast / budget * 100)) : 0;
+
+    els.controlling.innerHTML = `
+      <div class="controlling-grid">
+        <div class="control-card plan"><span class="label">PLAN</span><strong>${money(planned)}</strong><small>Geplante Modernisierung</small></div>
+        <div class="control-card commit"><span class="label">AUFTRAG / GEBUNDEN</span><strong>${money(committed)}</strong><small>Beauftragt + Equipmentkäufe</small></div>
+        <div class="control-card actual"><span class="label">IST</span><strong>${money(actual)}</strong><small>Tatsächlich ausgegeben</small></div>
+        <div class="control-card forecast"><span class="label">FORECAST</span><strong>${money(forecast)}</strong><small>Erwarteter Jahresendstand</small></div>
+      </div>
+      <div class="control-gap">
+        <strong>Forecast vs. Jahresbudget</strong>
+        <div class="control-track"><span style="width:${ratio}%"></span></div>
+        <span class="${gap < 0 ? 'control-bad' : 'control-good'}">${money(Math.abs(gap))} ${gap < 0 ? 'über dem Budget' : 'Puffer bis zum Budget'}</span>
+        · ${percent(budget ? forecast / budget * 100 : 0)} prognostiziert.
+      </div>`;
+  }
+
+  function renderDivisions(data) {
+    const groups = data.divisions || [];
+    els.divisions.innerHTML = `<div class="division-grid">${groups.map((g) => `
+      <article class="division-card ${activeDivision === g.division ? 'selected' : ''}" data-division="${esc(g.division)}">
+        <div class="division-head"><strong>${g.division === 'DA' ? 'DAs' : 'DAv'}</strong><span>${g.sites || 0} Standort-Zuordnungen · ${g.rooms || 0} Räume</span></div>
+        <div class="division-number">${money(g.budget)}</div>
+        <div class="division-bar"><span style="width:${Math.min(100, Number(g.utilization) || 0)}%"></span></div>
+        <div class="division-stats">
+          <span>Gebunden<b>${money(g.committed)}</b></span>
+          <span>Ist<b>${money(g.spent)}</b></span>
+          <span>Forecast<b>${money(g.forecast)}</b></span>
+          <span>Frei<b>${money(g.available)}</b></span>
+        </div>
+      </article>`).join('')}</div>`;
+
+    els.divisions.querySelectorAll('.division-card').forEach((card) => {
+      card.addEventListener('click', () => {
+        activeDivision = activeDivision === card.dataset.division ? '' : card.dataset.division;
+        render(currentData);
+      });
+    });
+  }
+
+  function renderSites(data) {
+    const visible = (data.sites || []).filter((s) => !activeDivision || s.division === activeDivision);
+    const divisions = ['DA', 'DAv'];
+    let html = '';
+
+    divisions.forEach((division) => {
+      const group = visible.filter((s) => s.division === division);
+      if (!group.length) return;
+      html += `<tr><td colspan="9"><div class="site-group"><strong>${division === 'DA' ? 'DAs' : 'DAv'} · ${group.length} Standort-Zuordnungen</strong><span>${group.map(s => esc(s.site)).join(' · ')}</span></div></td></tr>`;
+      html += group.map((s) => {
+        const hamburg = siteKey(s.site) === 'hamburg';
+        const allocation = Number(s.allocation || 1);
+        return `<tr>
+          <td><div class="site-name"><span class="division-pill ${s.division === 'DA' ? 'da' : 'dav'}">${s.division === 'DA' ? 'DAs' : 'DAv'}</span><strong>${esc(s.site)}</strong></div><small>${s.rooms || 0} Räume · ${percent(s.utilization)} gebunden${allocation < 1 ? ' · 50 % Anteil' : ''}</small></td>
+          <td>${s.rooms || 0}</td>
+          <td><input class="site-budget-input" data-site="${encodeURIComponent(s.site)}" type="number" min="0" step="0.01" value="${s.budget || ''}" ${hamburg ? 'disabled' : ''}></td>
+          <td>${money(s.modernization_planned)}</td><td>${money(s.committed)}</td><td>${money(s.spent)}</td><td>${money(s.forecast)}</td><td>${money(s.available)}</td>
+          <td>${hamburg ? '<small>50 % DA / 50 % DAv</small>' : `<button class="btn btn-small site-save" data-site="${encodeURIComponent(s.site)}">Speichern</button>`}</td>
+        </tr>`;
+      }).join('');
+    });
+
+    els.sites.innerHTML = html || '<tr><td colspan="9">Keine Standorte für den gewählten Filter.</td></tr>';
+    els.sites.querySelectorAll('.site-save').forEach((button) => button.addEventListener('click', async () => {
+      const input = button.closest('tr').querySelector('.site-budget-input');
+      try {
+        button.disabled = true;
+        button.textContent = 'Speichern …';
+        await api(`/api/budget-overview/sites/${encodeURIComponent(decodeURIComponent(button.dataset.site))}?year=${encodeURIComponent(data.year)}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ budget: Number(input.value) || 0 })
+        });
+        await load();
+      } catch (e) {
+        showError(`Standortbudget konnte nicht gespeichert werden: ${e.message}`);
+        button.disabled = false;
+        button.textContent = 'Speichern';
+      }
+    }));
+  }
+
+  function render(data) {
+    currentData = data;
+    clearError();
+    if (!els.year.options.length) {
+      (data.years || []).forEach((year) => els.year.add(new Option(year, year)));
+    }
+    els.year.value = String(data.year);
+    els.globalInput.value = data.total?.budget || '';
+    $('#budgetKpi').textContent = money(data.total?.budget);
+    $('#plannedKpi').textContent = money(data.total?.committed);
+    $('#spentKpi').textContent = money(data.total?.spent);
+    $('#availableKpi').textContent = money(data.total?.available);
+
+    renderControlling(data);
+    renderDivisions(data);
+    renderSites(data);
+
+    const t = data.total || {};
+    const forecastGap = Number(t.budget || 0) - Number(t.forecast || 0);
+    els.totals.innerHTML = `
+      <div class="budget-hero-grid">
+        ${moneyLine('Jahresbudget', t.budget)}
+        ${moneyLine('Modernisierung geplant', t.modernization_planned)}
+        ${moneyLine('Modernisierung beauftragt', t.modernization_committed)}
+        ${moneyLine('Modernisierung Ist', t.modernization_actual)}
+        ${moneyLine('Equipment Ist', t.equipment_spent)}
+        ${moneyLine('Gesamt Ist', t.spent, 'strong')}
+        ${moneyLine('Gesamt gebunden', t.committed)}
+        ${moneyLine('Forecast', t.forecast, forecastGap < 0 ? 'warning-value' : '')}
+        ${moneyLine('Verfügbar', t.available, 'strong')}
+      </div>
+      <div class="budget-progress"><span style="width:${Math.min(100, Number(t.utilization) || 0)}%"></span></div>
+      <small>${percent(t.utilization)} Budgetbindung · Equipmentkäufe werden sofort als Ist und gebunden berücksichtigt.</small>`;
+  }
+
+  async function load() {
+    try {
+      clearError();
+      const data = await api(`/api/budget-overview?${params().toString()}`);
+      render(data);
+    } catch (e) {
+      showError(`Budgetdaten konnten nicht geladen werden: ${e.message}`);
+      console.error('Budget load failed', e);
+    }
+  }
+
+  els.globalForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      const year = els.year.value || new Date().getFullYear();
+      const budget = Number(els.globalInput.value) || 0;
+      const data = await api(`/api/budget-overview?year=${encodeURIComponent(year)}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ budget })
+      });
+      render(data);
+    } catch (e) {
+      showError(`Gesamtbudget konnte nicht gespeichert werden: ${e.message}`);
+    }
+  });
+
+  els.year.addEventListener('change', load);
+  els.quarter.addEventListener('change', load);
+  els.month.addEventListener('change', load);
+
+  load();
+})();
