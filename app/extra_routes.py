@@ -10,8 +10,6 @@ Room = main.Room
 Equipment = main.Equipment
 Modernization = main.Modernization
 Ticket = main.Ticket
-YearlyBudget = main.YearlyBudget
-BudgetSettings = main.BudgetSettings
 SessionLocal = main.SessionLocal
 DA_SITES = main.DA_SITES
 
@@ -58,7 +56,7 @@ def budget_ledger(year: int | None = None, quarter: int | None = None, month: in
     for p in db.scalars(select(Modernization)).all():
         room = rooms.get(p.room_id)
         value_date = p.start_date or p.completion_date or (date(p.project_year,12,31) if p.project_year else None)
-        if room and project_year(p) == selected and in_period(value_date, selected, quarter, month):
+        if room and project_year(p) == selected and (quarter is None and month is None or in_period(value_date, selected, quarter, month)):
             d = division_for(room.site)
             if (not division or d == division) and (not site or room.site == site):
                 amount = p.actual_cost or p.commissioned or p.budget or 0
