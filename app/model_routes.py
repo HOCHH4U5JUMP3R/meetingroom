@@ -1,5 +1,7 @@
 from pathlib import Path
 from uuid import uuid4
+from datetime import date
+from typing import Optional
 from fastapi import Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import Boolean, ForeignKey, Integer, String, Text, Float, select, func
@@ -12,6 +14,27 @@ Equipment = main.Equipment
 DATA = main.DATA
 MODEL_UPLOADS = DATA / 'uploads' / 'models'
 MODEL_UPLOADS.mkdir(parents=True, exist_ok=True)
+
+# The original equipment schema used a small Literal category list. The model
+# catalog intentionally supports arbitrary categories such as Kamera, PC,
+# Switch, AirMedia, Touchpanel, etc. Replace that request schema at startup so
+# catalog data can be used without validation failures.
+class FlexibleEquipmentIn(BaseModel):
+    name: str
+    category: str = 'Monitor'
+    manufacturer: str = ''
+    model: str = ''
+    serial: str = ''
+    size_inches: Optional[float] = None
+    mounting: str = ''
+    status: str = 'Aktiv'
+    purchase_date: Optional[date] = None
+    purchase_price: float = 0
+    host_name: str = ''
+    inventory_number: str = ''
+    mac_address: str = ''
+    notes: str = ''
+main.EquipmentIn = FlexibleEquipmentIn
 
 class EquipmentModel(Base):
     __tablename__ = 'equipment_models'
@@ -61,24 +84,12 @@ def equipment_model_stats(db: Session = Depends(main.db)):
     manufacturer_count = db.scalar(select(func.count(func.distinct(EquipmentModel.manufacturer))).where(EquipmentModel.manufacturer != '')) or 0
     equipment_count = db.scalar(select(func.count(Equipment.id))) or 0
     assigned_count = db.scalar(select(func.count(EquipmentModelAssignment.id))) or 0
-    return {
-        'models': model_count,
-        'manufacturers': manufacturer_count,
-        'equipment': equipment_count,
-        'assigned': assigned_count,
-        'coverage': round(assigned_count / equipment_count * 100, 1) if equipment_count else 0,
-    }
+    return {'models': model_count, 'manufacturers': manufacturer_count, 'equipment': equipment_count, 'assigned': assigned_count, 'coverage': round(assigned_count / equipment_count * 100, 1) if equipment_count else 0}
 
 @app.get('/api/equipment-catalog')
 def equipment_catalog(db: Session = Depends(main.db)):
-    rows = db.execute(
-        select(EquipmentModelAssignment.equipment_id, EquipmentModel)
-        .join(EquipmentModel, EquipmentModel.id == EquipmentModelAssignment.model_id)
-    ).all()
-    return [
-        {'equipment_id': equipment_id, 'model': model_dump(model)}
-        for equipment_id, model in rows
-    ]
+    rows = db.execute(select(EquipmentModelAssignment.equipment_id, EquipmentModel).join(EquipmentModel, EquipmentModel.id == EquipmentModelAssignment.model_id)).all()
+    return [{'equipment_id': equipment_id, 'model': model_dump(model)} for equipment_id, model in rows]
 
 @app.post('/api/equipment-models')
 def create_equipment_model(payload: ModelIn, db: Session = Depends(main.db)):
