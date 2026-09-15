@@ -1,6 +1,5 @@
 from datetime import date, datetime
 from io import BytesIO
-from pathlib import Path
 from fastapi import Depends, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
@@ -45,6 +44,7 @@ HEADER_ALIASES = {
     'länge (m)': 'length', 'laenge (m)': 'length', 'länge': 'length', 'laenge': 'length',
     'breite (m)': 'width', 'breite': 'width',
     'höhe (m)': 'height', 'hoehe (m)': 'height', 'höhe': 'height', 'hoehe': 'height',
+    'lxbxh': 'dimensions', 'l x b x h': 'dimensions', 'lx bx h': 'dimensions',
     'sitzplätze': 'seats', 'sitzplaetze': 'seats', 'sitzplätze ': 'seats',
     'besonderheit': 'specialty', 'kategorie': 'category',
     'outlook-ressource': 'outlook_resource', 'outlookressource': 'outlook_resource',
@@ -78,6 +78,17 @@ def integer(v):
     return int(n) if n is not None else None
 
 
+def parse_dimensions(v):
+    text = clean(v)
+    if not text:
+        return (None, None, None)
+    text = text.lower().replace('×', 'x').replace('*', 'x').replace(',', '.')
+    parts = [p.strip() for p in text.split('x') if p.strip()]
+    if len(parts) != 3:
+        return (None, None, None)
+    return tuple(number(p) for p in parts)
+
+
 def parse_date(v):
     if v in (None, ''):
         return None
@@ -103,15 +114,20 @@ def row_to_room(row, headers):
     name = clean(values.get('name'))
     if not name:
         raise ValueError('Raumname fehlt')
+    length = number(values.get('length'))
+    width = number(values.get('width'))
+    height = number(values.get('height'))
+    if values.get('dimensions') and not any(x is not None for x in (length, width, height)):
+        length, width, height = parse_dimensions(values.get('dimensions'))
     return {
         'name': name,
         'site': clean(values.get('site')),
         'building': clean(values.get('building')),
         'floor': clean(values.get('floor')),
         'room_number': clean(values.get('room_number')),
-        'length': number(values.get('length')),
-        'width': number(values.get('width')),
-        'height': number(values.get('height')),
+        'length': length,
+        'width': width,
+        'height': height,
         'seats': integer(values.get('seats')),
         'specialty': clean(values.get('specialty')),
         'category': clean(values.get('category')),
@@ -141,7 +157,7 @@ def room_import_template():
     ws.auto_filter.ref = ws.dimensions
     widths = [28, 20, 18, 12, 14, 12, 12, 12, 12, 30, 20, 28, 30, 24, 24, 14, 22, 40]
     for idx, width in enumerate(widths, 1):
-        ws.column_dimensions[chr(64 + idx) if idx <= 26 else 'A'].width = width
+        ws.column_dimensions[chr(64 + idx)].width = width
     bio = BytesIO()
     wb.save(bio)
     bio.seek(0)
@@ -179,9 +195,10 @@ async def import_rooms(file: UploadFile = File(...), db: Session = Depends(main.
             continue
         try:
             values = row_to_room(row, headers)
-            if values['name'].casefold() in seen:
+            key = values['name'].casefold()
+            if key in seen:
                 raise ValueError('Raumname kommt in der Datei doppelt vor')
-            seen.add(values['name'].casefold())
+            seen.add(key)
             existing = db.scalar(select(Room).where(Room.name == values['name']))
             if existing:
                 for key, value in values.items():
