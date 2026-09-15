@@ -1,10 +1,51 @@
-const q=document.querySelector('#q'),list=document.querySelector('#list'),filters=document.querySelector('#filters');let assets=[],selected='';
+const q=document.querySelector('#q'),list=document.querySelector('#list'),filters=document.querySelector('#filters');let assets=[],catalog=[],selected='',grouped=false;
 const esc=v=>String(v??'–').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 const euro=v=>Number(v||0).toLocaleString('de-DE',{style:'currency',currency:'EUR',maximumFractionDigits:0});
 const norm=v=>String(v||'').toLowerCase();
 const age=e=>e.purchase_date?Math.max(0,(Date.now()-new Date(e.purchase_date).getTime())/31557600000):null;
 function badge(v){const s=norm(v),c=s.includes('defekt')||s.includes('störung')?'badge-danger':s.includes('wart')||s.includes('ausgemustert')?'badge-warning':'badge-success';return `<span class="badge ${c}">${esc(v||'Aktiv')}</span>`}
-async function load(){const rooms=await fetch('/api/rooms').then(r=>r.json());const details=await Promise.all(rooms.map(r=>fetch(`/api/rooms/${r.id}`).then(x=>x.ok?x.json():null).catch(()=>null)));assets=details.filter(Boolean).flatMap(r=>(r.equipment||[]).map(e=>({...e,room:r})));document.querySelector('#count').textContent=assets.length;document.querySelector('#active').textContent=assets.filter(e=>!['außer betrieb','defekt','ausgemustert'].some(x=>norm(e.status).includes(x))).length;document.querySelector('#display').textContent=assets.filter(e=>/display|monitor|bildschirm/.test(norm(e.category))).length;document.querySelector('#cost').textContent=euro(assets.reduce((n,e)=>n+Number(e.purchase_price||0),0));renderFilters();render()}
-function renderFilters(){const cats=[...new Set(assets.map(e=>e.category).filter(Boolean))].sort();filters.innerHTML='<button class="site-filter active" data-v="">Alle</button>'+cats.map(c=>`<button class="site-filter" data-v="${esc(c)}">${esc(c)}</button>`).join('')+`<button class="site-filter" data-v="__aging">>7 Jahre</button><button class="site-filter" data-v="__missing">Dokumentation fehlt</button>`;filters.querySelectorAll('button').forEach(b=>b.onclick=()=>{selected=b.dataset.v;filters.querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b));render()})}
-function render(){const term=norm(q.value);let rows=assets.filter(e=>{const cat=selected.startsWith('__')?true:(!selected||e.category===selected);const smart=selected==='__aging'?age(e)>7:selected==='__missing'?(e.documents||[]).filter(d=>d.kind!=='image').length===0:false;return cat&&(!selected.startsWith('__')||smart)&&[e.name,e.category,e.manufacturer,e.model,e.serial,e.inventory_number,e.host_name,e.room?.name,e.room?.site].some(v=>norm(v).includes(term))});rows.sort((a,b)=>(age(b)||-1)-(age(a)||-1));if(!rows.length){list.innerHTML='<div class="v2-loading">Keine Geräte gefunden.</div>';return}list.innerHTML=`<div class="asset-row asset-head"><span>Gerät</span><span>Raum</span><span>Inventar / Host</span><span>Alter / Status</span><span>Wert</span></div>`+rows.map(e=>{const a=age(e);const aging=a!=null&&a>7;return `<a class="asset-row" href="/static/room-detail.html?id=${e.room.id}"><div><strong>${esc(e.name)}</strong><small>${esc([e.manufacturer,e.model].filter(Boolean).join(' · ')||e.category)}</small></div><div><strong>${esc(e.room.name)}</strong><small>${esc([e.room.site,e.room.building,e.room.floor].filter(Boolean).join(' · '))}</small></div><div><strong>${esc(e.inventory_number||'–')}</strong><small>${esc(e.host_name||e.serial||'Keine Kennung')}</small></div><div><strong>${a==null?'Alter unbekannt':`${a.toFixed(1)} Jahre`}</strong><small>${badge(e.status||'Aktiv')}${aging?' · ⚠ Erneuerung prüfen':''}</small></div><strong>${euro(e.purchase_price)}</strong></a>`}).join('')}
+function modelLabel(e){return e.model_info?[e.model_info.manufacturer,e.model_info.name,e.model_info.model_number].filter(Boolean).join(' · '):([e.manufacturer,e.model].filter(Boolean).join(' · ')||'Kein Katalogmodell')}
+function modelCell(e){const m=e.model_info;if(!m)return '<span class="model-mini muted">Nicht zugeordnet</span>';return `<div class="model-mini">${m.image_url?`<img src="${esc(m.image_url)}" alt="">`:'<span class="model-mini-placeholder">▣</span>'}<span><strong>${esc(m.name)}</strong><small>${esc([m.manufacturer,m.model_number].filter(Boolean).join(' · ')||'Katalogmodell')}</small></span></div>`}
+async function load(){
+  const rooms=await fetch('/api/rooms').then(r=>r.json());
+  const details=await Promise.all(rooms.map(r=>fetch(`/api/rooms/${r.id}`).then(x=>x.ok?x.json():null).catch(()=>null)));
+  const catRes=await fetch('/api/equipment-catalog'); catalog=catRes.ok?await catRes.json():[];
+  const byEquipment=new Map(catalog.map(x=>[x.equipment_id,x.model]));
+  assets=details.filter(Boolean).flatMap(r=>(r.equipment||[]).map(e=>({...e,room:r,model_info:byEquipment.get(e.id)||null})));
+  document.querySelector('#count').textContent=assets.length;
+  document.querySelector('#active').textContent=assets.filter(e=>!['außer betrieb','defekt','ausgemustert'].some(x=>norm(e.status).includes(x))).length;
+  document.querySelector('#display').textContent=assets.filter(e=>/display|monitor|bildschirm/.test(norm(e.category))).length;
+  document.querySelector('#cost').textContent=euro(assets.reduce((n,e)=>n+Number(e.purchase_price||0),0));
+  renderFilters();render();
+}
+function renderFilters(){
+  const cats=[...new Set(assets.map(e=>e.category).filter(Boolean))].sort();
+  const manufacturers=[...new Set(assets.map(e=>e.model_info?.manufacturer||e.manufacturer).filter(Boolean))].sort();
+  const models=[...new Map(assets.filter(e=>e.model_info).map(e=>[e.model_info.id,e.model_info])).values()].sort((a,b)=>`${a.manufacturer} ${a.name}`.localeCompare(`${b.manufacturer} ${b.name}`,'de'));
+  filters.innerHTML=`<button class="site-filter ${selected===''?'active':''}" data-v="">Alle</button><select id="manufacturerFilter" class="site-filter-select"><option value="">Hersteller</option>${manufacturers.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('')}</select><select id="modelFilter" class="site-filter-select"><option value="">Modell</option>${models.map(m=>`<option value="${m.id}">${esc([m.manufacturer,m.name].filter(Boolean).join(' · '))}</option>`).join('')}</select>${cats.map(c=>`<button class="site-filter ${selected===c?'active':''}" data-v="${esc(c)}">${esc(c)}</button>`).join('')}<button class="site-filter ${selected==='__aging'?'active':''}" data-v="__aging">>7 Jahre</button><button class="site-filter ${selected==='__missing'?'active':''}" data-v="__missing">Dokumentation fehlt</button><button id="groupToggle" class="site-filter ${grouped?'active':''}">Nach Modell gruppieren</button>`;
+  filters.querySelectorAll('button[data-v]').forEach(b=>b.onclick=()=>{selected=b.dataset.v;filters.querySelectorAll('button[data-v]').forEach(x=>x.classList.toggle('active',x===b));render()});
+  const mf=filters.querySelector('#manufacturerFilter');mf.onchange=()=>{selected=mf.value?`__manufacturer:${mf.value}`:'';render()};
+  const modf=filters.querySelector('#modelFilter');modf.onchange=()=>{selected=modf.value?`__model:${modf.value}`:'';render()};
+  filters.querySelector('#groupToggle').onclick=()=>{grouped=!grouped;renderFilters();render()};
+}
+function matches(e,term){
+  const search=[e.name,e.category,e.manufacturer,e.model,e.serial,e.inventory_number,e.host_name,e.room?.name,e.room?.site,e.model_info?.name,e.model_info?.model_number,e.model_info?.manufacturer].some(v=>norm(v).includes(term));
+  let filter=true;
+  if(selected==='__aging')filter=age(e)>7;
+  else if(selected==='__missing')filter=(e.documents||[]).filter(d=>d.kind!=='image').length===0;
+  else if(selected.startsWith('__manufacturer:'))filter=(e.model_info?.manufacturer||e.manufacturer)===selected.slice(15);
+  else if(selected.startsWith('__model:'))filter=String(e.model_info?.id||'')===selected.slice(8);
+  else filter=!selected||e.category===selected;
+  return filter&&search;
+}
+function render(){
+  const term=norm(q.value);let rows=assets.filter(e=>matches(e,term));
+  rows.sort((a,b)=>modelLabel(a).localeCompare(modelLabel(b),'de')||(age(b)||-1)-(age(a)||-1));
+  if(!rows.length){list.innerHTML='<div class="v2-loading">Keine Geräte gefunden.</div>';return}
+  const header='<div class="asset-row asset-head"><span>Gerät</span><span>Modell</span><span>Raum</span><span>Inventar / Host</span><span>Alter / Status</span><span>Wert</span></div>';
+  const row=e=>{const a=age(e),aging=a!=null&&a>7;return `<a class="asset-row" href="/static/room-detail.html?id=${e.room.id}"><div><strong>${esc(e.name)}</strong><small>${esc(e.category||'Equipment')}</small></div><div>${modelCell(e)}</div><div><strong>${esc(e.room.name)}</strong><small>${esc([e.room.site,e.room.building,e.room.floor].filter(Boolean).join(' · '))}</small></div><div><strong>${esc(e.inventory_number||'–')}</strong><small>${esc(e.host_name||e.serial||'Keine Kennung')}</small></div><div><strong>${a==null?'Alter unbekannt':`${a.toFixed(1)} Jahre`}</strong><small>${badge(e.status||'Aktiv')}${aging?' · ⚠ Erneuerung prüfen':''}</small></div><strong>${euro(e.purchase_price)}</strong></a>`};
+  if(!grouped){list.innerHTML=header+rows.map(row).join('');return}
+  const groups=new Map();rows.forEach(e=>{const key=e.model_info?.id?String(e.model_info.id):'none';if(!groups.has(key))groups.set(key,{model:e.model_info,rows:[]});groups.get(key).rows.push(e)});
+  list.innerHTML=header+[...groups.values()].map(g=>`<div class="asset-group-head">${g.model?.image_url?`<img src="${esc(g.model.image_url)}" alt="">`:''}<div><strong>${esc(g.model?.name||'Ohne Katalogmodell')}</strong><small>${esc([g.model?.manufacturer,g.model?.model_number].filter(Boolean).join(' · ')||'Kein Modell hinterlegt')} · ${g.rows.length} Geräte</small></div></div>${g.rows.map(row).join('')}`).join('');
+}
 q.addEventListener('input',render);load().catch(e=>{list.innerHTML=`<div class="v2-loading">Fehler: ${esc(e.message)}</div>`});
