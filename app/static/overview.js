@@ -3,144 +3,110 @@ const filterContainer = document.querySelector('#siteFilters');
 const groupContainer = document.querySelector('#roomGroups');
 const emptyState = document.querySelector('#overviewEmpty');
 const errorState = document.querySelector('#overviewError');
-const roomCount = document.querySelector('#roomCount');
 let allRooms = [];
 let selectedSite = '';
 
-function escapeHtml(value) {
-  return String(value == null || value === '' ? '–' : value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
-
-function siteFor(room) {
-  return room.site || 'Ohne Standort';
-}
-
-function roomLocation(room) {
-  const parts = [];
-  if (room.building) parts.push(room.building);
-  if (room.floor) parts.push(`Etage ${room.floor}`);
-  if (room.room_number) parts.push(`Raum ${room.room_number}`);
-  return parts.join(' · ') || 'Keine Standortdaten';
-}
-
-function statusClass(status) {
-  const value = String(status || '').toLowerCase();
-  if (value.includes('aktiv')) return 'success';
-  if (value.includes('störung')) return 'danger';
-  if (value.includes('modernisierung')) return 'warning';
-  return '';
-}
-
-function ticketLabel(room) {
-  const open = Number(room.open_ticket_count || 0);
-  const total = Number(room.ticket_count || 0);
-  return `${open} offen · ${total} gesamt`;
-}
+const esc = v => String(v == null || v === '' ? '–' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+const siteFor = r => r.site || 'Ohne Standort';
+const status = r => String(r.status || 'Aktiv').toLowerCase();
+const isBad = r => status(r).includes('störung') || status(r).includes('außer') || Number(r.open_ticket_count || 0) >= 3;
+const isWarn = r => !isBad(r) && (status(r).includes('modern') || Number(r.open_ticket_count || 0) > 0);
+const roomLocation = r => [r.building, r.floor && `Etage ${r.floor}`, r.room_number && `Raum ${r.room_number}`].filter(Boolean).join(' · ') || 'Keine Standortdaten';
 
 function filteredRooms() {
-  const query = searchInput.value.trim().toLowerCase();
-  return allRooms.filter(room => {
-    if (selectedSite && siteFor(room) !== selectedSite) return false;
-    const searchable = [room.name, room.site, room.building, room.floor, room.room_number, room.category, room.connections]
-      .join(' ')
-      .toLowerCase();
-    return searchable.indexOf(query) !== -1;
+  const q = searchInput.value.trim().toLowerCase();
+  return allRooms.filter(r => {
+    if (selectedSite && siteFor(r) !== selectedSite) return false;
+    return [r.name,r.site,r.building,r.floor,r.room_number,r.category,r.connections,r.owner,r.host_name].join(' ').toLowerCase().includes(q);
+  });
+}
+
+function renderDashboardMetrics() {
+  const total = allRooms.length;
+  const open = allRooms.reduce((n,r) => n + Number(r.open_ticket_count || 0), 0);
+  const bad = allRooms.filter(isBad).length;
+  const warn = allRooms.filter(isWarn).length;
+  const ok = Math.max(0,total-bad-warn);
+  document.querySelector('#kpiRooms').textContent = total;
+  document.querySelector('#kpiTickets').textContent = open;
+  document.querySelector('#kpiTicketHint').textContent = open ? 'Handlungsbedarf vorhanden' : 'alles ruhig';
+  document.querySelector('#statusOk').textContent = ok;
+  document.querySelector('#statusWarn').textContent = warn;
+  document.querySelector('#statusBad').textContent = bad;
+  document.querySelector('#statusOkBar').style.width = `${total ? ok/total*100 : 0}%`;
+  document.querySelector('#statusWarnBar').style.width = `${total ? warn/total*100 : 0}%`;
+  document.querySelector('#statusBadBar').style.width = `${total ? bad/total*100 : 0}%`;
+}
+
+async function loadBudget() {
+  try {
+    const res = await fetch('/api/budget-overview?year=2026');
+    if (!res.ok) return;
+    const data = await res.json();
+    const t = data.total || data;
+    const budget = Number(t.budget || 0), spent = Number(t.spent || 0), planned = Number(t.planned || 0);
+    document.querySelector('#kpiBudget').textContent = budget.toLocaleString('de-DE',{maximumFractionDigits:0}) + ' €';
+    const used = budget ? Math.min(100,(spent+planned)/budget*100) : 0;
+    document.querySelector('#kpiBudgetHint').textContent = `${used.toFixed(0)} % verplant / verbraucht`;
+    document.querySelector('#budgetHero').textContent = `${(budget-spent-planned).toLocaleString('de-DE',{maximumFractionDigits:0})} €`;
+    document.querySelector('#budgetSub').textContent = `${(spent+planned).toLocaleString('de-DE',{maximumFractionDigits:0})} € verplant / verbraucht von ${budget.toLocaleString('de-DE',{maximumFractionDigits:0})} €`;
+    document.querySelector('#budgetProgress').style.width = `${used}%`;
+  } catch (_) {}
+}
+
+async function loadExtendedMetrics() {
+  let projects = 0;
+  const attention = [];
+  await Promise.all(allRooms.slice(0,120).map(async r => {
+    try {
+      const x = await fetch(`/api/rooms/${r.id}`).then(v=>v.json());
+      projects += (x.modernizations || []).length;
+      if ((x.tickets || []).some(t => ['Offen','In Bearbeitung'].includes(t.status)) || isBad(x)) attention.push(x);
+    } catch (_) {}
+  }));
+  document.querySelector('#kpiModern').textContent = projects;
+  attention.sort((a,b)=>(b.open_ticket_count||0)-(a.open_ticket_count||0));
+  const list = document.querySelector('#attentionList');
+  if (!attention.length) list.innerHTML = '<div class="attention-good"><strong>Alles im grünen Bereich</strong><span>Aktuell wurden keine kritischen Räume erkannt.</span></div>';
+  else list.innerHTML = attention.slice(0,6).map(r => `<a class="attention-row" href="/static/room-detail.html?id=${encodeURIComponent(r.id)}"><span class="attention-icon">!</span><div><strong>${esc(r.name)}</strong><small>${esc(roomLocation(r))}</small></div><span class="attention-reason">${Number(r.open_ticket_count||0)} offene Tickets</span><b>›</b></a>`).join('');
+}
+
+function renderFilters() {
+  const sites = [...new Set(allRooms.map(siteFor))].sort();
+  filterContainer.innerHTML = '';
+  ['Alle',...sites].forEach(site => {
+    const b = document.createElement('button'); b.type='button'; b.className=`site-filter ${(!selectedSite && site==='Alle') || site===selectedSite ? 'active':''}`; b.textContent=site;
+    b.onclick=()=>{selectedSite=site==='Alle'?'':site;renderFilters();renderRooms();}; filterContainer.appendChild(b);
   });
 }
 
 function renderRooms() {
   const rooms = filteredRooms();
-  const grouped = {};
-  rooms.forEach(room => {
-    const site = siteFor(room);
-    if (!grouped[site]) grouped[site] = [];
-    grouped[site].push(room);
-  });
-
-  roomCount.textContent = String(rooms.length);
+  document.querySelector('#roomResultText').textContent = `${rooms.length} ${rooms.length===1?'Raum':'Räume'}${selectedSite ? ` · ${selectedSite}` : ' · alle Standorte'}`;
   emptyState.hidden = rooms.length !== 0;
-  groupContainer.innerHTML = '';
-
-  Object.keys(grouped).sort().forEach(site => {
-    const siteRooms = grouped[site];
-    const section = document.createElement('section');
-    section.className = 'site-group';
-    section.innerHTML = `
-      <div class="site-group-header">
-        <div><div class="eyebrow">STANDORT</div><h2>${escapeHtml(site)}</h2></div>
-        <span>${siteRooms.length} ${siteRooms.length === 1 ? 'Raum' : 'Räume'}</span>
-      </div>
-      <div class="room-list" role="list"></div>`;
-
-    const list = section.querySelector('.room-list');
-    siteRooms.forEach(room => {
-      const row = document.createElement('a');
-      row.className = 'room-list-row';
-      row.setAttribute('role', 'listitem');
-      row.href = `/static/room-detail.html?id=${encodeURIComponent(room.id)}`;
-      const image = room.image_url
-        ? `<img class="room-list-image" src="${escapeHtml(room.image_url)}" alt="Raumbild ${escapeHtml(room.name)}">`
-        : `<div class="room-list-image room-list-image-placeholder" aria-hidden="true">⌂</div>`;
-      row.innerHTML = `
-        ${image}
-        <div class="room-list-primary"><strong>${escapeHtml(room.name)}</strong><span>${escapeHtml(siteFor(room))} · ${escapeHtml(roomLocation(room))}</span></div>
-        <div class="room-list-category"><span>Kategorie</span><strong>${escapeHtml(room.category || 'Meetingraum')}</strong></div>
-        <div class="room-list-owner"><span>Verantwortlich</span><strong>${escapeHtml(room.owner)}</strong></div>
-        <div class="room-list-tickets"><span>Tickets</span><strong>${escapeHtml(ticketLabel(room))}</strong></div>
-        <span class="status-badge ${statusClass(room.status)}">${escapeHtml(room.status || 'Aktiv')}</span>
-        <span class="room-list-arrow" aria-hidden="true">›</span>`;
-      list.appendChild(row);
+  groupContainer.innerHTML='';
+  const grouped={}; rooms.forEach(r=>(grouped[siteFor(r)] ||= []).push(r));
+  Object.keys(grouped).sort().forEach(site=>{
+    const section=document.createElement('div'); section.className='v2-site-section';
+    section.innerHTML=`<div class="v2-site-title"><span>${esc(site)}</span><small>${grouped[site].length} Räume</small></div><div class="v2-room-grid-inner"></div>`;
+    const grid=section.querySelector('.v2-room-grid-inner');
+    grouped[site].forEach(r=>{
+      const state=isBad(r)?'danger':isWarn(r)?'warning':'success';
+      const image=r.image_url?`<img src="${esc(r.image_url)}" alt="Raumbild ${esc(r.name)}">`:'<div class="room-placeholder">⌂</div>';
+      const card=document.createElement('a'); card.className='v2-room-card'; card.href=`/static/room-detail.html?id=${encodeURIComponent(r.id)}`;
+      card.innerHTML=`<div class="v2-room-image">${image}<span class="room-health ${state}">${state==='success'?'OK':state==='warning'?'Hinweis':'Störung'}</span></div><div class="v2-room-body"><div class="v2-room-title"><strong>${esc(r.name)}</strong><span>›</span></div><p>${esc(roomLocation(r))}</p><div class="v2-room-meta"><span>◷ ${esc(r.seats ?? '–')} Plätze</span><span>⚑ ${Number(r.open_ticket_count||0)} offen</span></div><div class="v2-room-footer"><span>${esc(r.category || 'Meetingraum')}</span><span>${esc(r.owner || 'Kein Verantwortlicher')}</span></div></div>`;
+      grid.appendChild(card);
     });
     groupContainer.appendChild(section);
   });
 }
 
-
-function renderFilters() {
-  const seen = {};
-  allRooms.forEach(room => { seen[siteFor(room)] = true; });
-  const sites = Object.keys(seen).sort();
-  filterContainer.innerHTML = '';
-
-  const allButton = document.createElement('button');
-  allButton.type = 'button';
-  allButton.className = `site-filter ${selectedSite ? '' : 'active'}`;
-  allButton.textContent = 'Alle Standorte';
-  allButton.addEventListener('click', () => { selectedSite = ''; renderFilters(); renderRooms(); });
-  filterContainer.appendChild(allButton);
-
-  sites.forEach(site => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = `site-filter ${site === selectedSite ? 'active' : ''}`;
-    button.textContent = site;
-    button.addEventListener('click', () => { selectedSite = site; renderFilters(); renderRooms(); });
-    filterContainer.appendChild(button);
-  });
-}
-
 async function loadRooms() {
-  const roomsResponse = await fetch('/api/rooms', { headers: { Accept: 'application/json' } });
-  if (!roomsResponse.ok) throw new Error(`Räume konnten nicht geladen werden (HTTP ${roomsResponse.status}).`);
-  const data = await roomsResponse.json();
-  if (!Array.isArray(data)) throw new Error('Die Raumdaten haben ein ungültiges Format.');
-  allRooms = data;
-  errorState.hidden = true;
-  renderFilters();
-  renderRooms();
-
-
+  try {
+    const res=await fetch('/api/rooms',{headers:{Accept:'application/json'}}); if(!res.ok) throw new Error(`Räume konnten nicht geladen werden (HTTP ${res.status}).`);
+    allRooms=await res.json(); if(!Array.isArray(allRooms)) throw new Error('Ungültiges Raumdatenformat.');
+    errorState.hidden=true; renderFilters(); renderDashboardMetrics(); renderRooms(); loadBudget(); loadExtendedMetrics();
+  } catch(e){ console.error(e); errorState.textContent=e.message; errorState.hidden=false; emptyState.hidden=true; }
 }
-
-searchInput.addEventListener('input', renderRooms);
-loadRooms().catch(error => {
-  console.error(error);
-  errorState.textContent = error.message;
-  errorState.hidden = false;
-  emptyState.hidden = true;
-});
+searchInput.addEventListener('input',renderRooms);
+loadRooms();
