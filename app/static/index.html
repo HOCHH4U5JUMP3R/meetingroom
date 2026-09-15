@@ -3,43 +3,69 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Meetingraumverwaltung – Übersicht</title>
-  <link rel="stylesheet" href="/static/style.css?v=20">
+  <title>Meetingroom · Command Center</title>
+  <link rel="stylesheet" href="/static/style.css?v=30">
 </head>
-<body>
-  <header class="topbar">
-    <div class="brand">
-      <h1>Meetingraumverwaltung</h1>
-      <p>Standorte und Meetingräume im Überblick</p>
-    </div>
-    <a href="/static/room-form.html" class="btn btn-primary">＋ Neuer Raum</a>
+<body class="v2">
+  <header class="v2-topbar">
+    <button class="v2-mobile-nav" type="button" aria-label="Navigation öffnen" onclick="document.body.classList.toggle('nav-open')">☰</button>
+    <a class="v2-logo" href="/">MEETING<span>ROOM</span></a>
+    <label class="v2-global-search"><span>⌕</span><input id="roomSearch" type="search" placeholder="Räume, Gebäude, Hostname oder Ausstattung suchen …" autocomplete="off"></label>
+    <a class="v2-top-action" href="/static/room-form.html">＋ Neuer Raum</a>
   </header>
-  <main>
-    <section class="overview-hero">
-      <div>
-        <div class="eyebrow">RAUMÜBERSICHT</div>
-        <h2>Meetingräume finden</h2>
-        <p>Wähle einen Standort oder suche direkt nach Raumname, Raumnummer, Gebäude oder Ausstattung.</p>
-      </div>
-      <div class="overview-count"><strong id="roomCount">–</strong><span>Räume</span></div>
+  <aside class="v2-sidebar">
+    <nav>
+      <a class="active" href="/"><b>⌂</b>Dashboard</a>
+      <a href="#rooms"><b>▦</b>Räume</a>
+      <a href="/static/equipment.html"><b>▣</b>Equipment</a>
+      <a href="/static/tickets.html"><b>◉</b>Tickets <em id="navTicketCount">–</em></a>
+      <a href="/static/modernization.html"><b>⚒</b>Modernisierung</a>
+      <a href="/static/budget.html"><b>€</b>Budget</a>
+    </nav>
+    <div class="v2-sidebar-footer">Meetingroom V2<br><span>Workplace Management</span></div>
+  </aside>
+  <main class="v2-main">
+    <section class="v2-welcome">
+      <div><div class="eyebrow">COMMAND CENTER</div><h1>Meetingräume im Griff.</h1><p>Räume, Technik, Störungen, Modernisierung und Budget auf einen Blick.</p></div>
+      <a class="btn btn-primary" href="/static/room-form.html">＋ Raum anlegen</a>
     </section>
 
-    <a class="budget-link" href="/static/budget.html">Budgetplanung für alle Standorte öffnen <span aria-hidden="true">→</span></a>
-
-
-    <section class="overview-controls" aria-label="Raumfilter">
-      <label class="search-field" for="roomSearch"><span aria-hidden="true">⌕</span><input id="roomSearch" type="search" placeholder="Raum suchen …" autocomplete="off"></label>
-      <div id="siteFilters" class="site-filters" aria-label="Standort auswählen"></div>
+    <section class="v2-kpis" aria-label="Kennzahlen">
+      <article><span>Räume</span><strong id="kpiRooms">–</strong><small>im System</small></article>
+      <article><span>Offene Tickets</span><strong id="kpiTickets">–</strong><small id="kpiTicketHint">aktuell</small></article>
+      <article><span>Modernisierung</span><strong id="kpiModern">–</strong><small>Projekte erfasst</small></article>
+      <article class="kpi-budget"><span>Budget 2026</span><strong id="kpiBudget">–</strong><small id="kpiBudgetHint">wird geladen …</small></article>
     </section>
 
-    <p id="overviewError" class="form-message" role="alert" hidden></p>
-    <section id="overviewEmpty" class="empty-state" hidden>
-      <div class="empty-icon">⌂</div>
-      <h2>Keine Räume gefunden</h2>
-      <p>Ändere die Suche oder lege einen neuen Meetingraum an.</p>
+    <section class="v2-grid-main">
+      <article class="v2-card v2-status-card">
+        <div class="v2-card-head"><div><div class="eyebrow">BETRIEB</div><h2>Raumstatus</h2></div><a href="#rooms">Alle Räume →</a></div>
+        <div class="status-overview">
+          <div><i class="dot ok"></i><strong id="statusOk">–</strong><span>Aktiv</span></div>
+          <div><i class="dot warn"></i><strong id="statusWarn">–</strong><span>Hinweis</span></div>
+          <div><i class="dot bad"></i><strong id="statusBad">–</strong><span>Störung</span></div>
+        </div>
+        <div class="status-bar"><span id="statusOkBar"></span><span id="statusWarnBar"></span><span id="statusBadBar"></span></div>
+      </article>
+      <article class="v2-card">
+        <div class="v2-card-head"><div><div class="eyebrow">BUDGET</div><h2>Budget 2026</h2></div><a href="/static/budget.html">Details →</a></div>
+        <div class="budget-hero"><strong id="budgetHero">–</strong><span id="budgetSub">Budgetdaten werden geladen</span></div>
+        <div class="status-bar budget-bar"><span id="budgetProgress"></span></div>
+      </article>
     </section>
-    <section id="roomGroups" class="site-groups" aria-live="polite"></section>
+
+    <section class="v2-card attention-card">
+      <div class="v2-card-head"><div><div class="eyebrow">PRIORITÄTEN</div><h2>Aufmerksamkeit erforderlich</h2></div></div>
+      <div id="attentionList" class="attention-list"><div class="v2-loading">Daten werden geladen …</div></div>
+    </section>
+
+    <section id="rooms" class="v2-card rooms-card">
+      <div class="v2-card-head rooms-head"><div><div class="eyebrow">RAUMVERZEICHNIS</div><h2>Räume</h2><p id="roomResultText">Alle Räume nach Standort</p></div><div id="siteFilters" class="site-filters v2-filters"></div></div>
+      <div id="overviewError" class="form-message" role="alert" hidden></div>
+      <div id="overviewEmpty" class="empty-state" hidden><div class="empty-icon">⌂</div><h2>Keine Räume gefunden</h2><p>Ändere deine Suche oder den Standortfilter.</p></div>
+      <div id="roomGroups" class="v2-room-grid" aria-live="polite"></div>
+    </section>
   </main>
-  <script src="/static/overview.js?v=20"></script>
+  <script src="/static/overview.js?v=30"></script>
 </body>
 </html>
