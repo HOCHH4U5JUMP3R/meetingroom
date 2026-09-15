@@ -1,73 +1,8 @@
-const form = document.querySelector('#entityForm');
-const config = JSON.parse(document.querySelector('#formConfig').textContent);
-const params = new URLSearchParams(window.location.search);
-const roomId = Number(params.get('room_id'));
-const entryId = Number(params.get('id'));
-
-function message(text, type = 'error') {
-  const element = document.querySelector('#formMessage');
-  element.textContent = text;
-  element.className = `form-message ${type}`;
-}
-
-function valueFor(field) {
-  const input = form.elements[field.name];
-  if (field.type === 'checkbox') return input.checked;
-  if (field.type === 'number') return input.value === '' ? null : Number(input.value);
-  return input.value.trim();
-}
-
-async function loadEntry() {
-  if (!roomId) {
-    message('Es wurde kein Meetingraum ausgewählt.');
-    form.querySelector('button[type="submit"]').disabled = true;
-    return;
-  }
-  if (!entryId) return;
-
-  document.querySelector('#pageTitle').textContent = config.editTitle;
-  const response = await fetch(`/api/rooms/${roomId}`);
-  if (!response.ok) throw new Error('Raum konnte nicht geladen werden.');
-  const room = await response.json();
-  const entry = (room[config.collection] || []).find(item => item.id === entryId);
-  if (!entry) throw new Error('Der Eintrag wurde nicht gefunden.');
-
-  config.fields.forEach(field => {
-    const input = form.elements[field.name];
-    if (!input) return;
-    if (field.type === 'checkbox') input.checked = Boolean(entry[field.name]);
-    else input.value = entry[field.name] ?? '';
-  });
-}
-
-form.addEventListener('submit', async event => {
-  event.preventDefault();
-  if (!roomId) return;
-  const data = Object.fromEntries(config.fields.map(field => [field.name, valueFor(field)]));
-  const url = entryId ? `/api/${config.kind}/${entryId}` : `/api/rooms/${roomId}/${config.kind}`;
-  const response = await fetch(url, {
-    method: entryId ? 'PUT' : 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(data)
-  });
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    message(error.detail || 'Speichern fehlgeschlagen.');
-    return;
-  }
-  const saved = await response.json();
-  if (config.kind === 'equipment') {
-    for (const [field, kind] of [['offerFile', 'offer'], ['invoiceFile', 'invoice'], ['imageFile', 'image']]) {
-      const file = form.elements[field]?.files?.[0];
-      if (!file) continue;
-      const upload = new FormData();
-      upload.append('file', file);
-      const uploadResponse = await fetch(`/api/equipment/${saved.id}/documents?kind=${kind}`, { method: 'POST', body: upload });
-      if (!uploadResponse.ok) { message('Gerät gespeichert, aber mindestens eine Datei konnte nicht hochgeladen werden.'); return; }
-    }
-  }
-  window.location.href = `/static/room-detail.html?id=${roomId}`;
-});
-
-document.querySelector('#cancel').addEventListener('click', () => window.location.href = `/static/room-detail.html?id=${roomId}`);
-loadEntry().catch(error => message(error.message));
+const form=document.querySelector('#entityForm');const config=JSON.parse(document.querySelector('#formConfig').textContent);const params=new URLSearchParams(location.search);let roomId=Number(params.get('room_id'))||0;const entryId=Number(params.get('id'))||0;
+function message(text,type='error'){const e=document.querySelector('#formMessage');e.textContent=text;e.className=`form-message ${type}`}
+function valueFor(field){const input=form.elements[field.name];if(field.type==='checkbox')return input.checked;if(field.type==='number')return input.value===''?null:Number(input.value);return input.value.trim()}
+async function chooseRoom(){if(roomId||entryId)return true;const rooms=await fetch('/api/rooms').then(r=>{if(!r.ok)throw Error('Räume konnten nicht geladen werden.');return r.json()});if(!rooms.length){message('Bitte zuerst einen Meetingraum anlegen.');form.querySelector('button[type="submit"]').disabled=true;return false}const wrap=document.createElement('div');wrap.className='field full';wrap.innerHTML='<label>Meetingraum *</label><select id="roomSelector" required><option value="">Bitte Raum auswählen</option></select><span class="field-hint">Der Eintrag wird diesem Raum zugeordnet.</span>';const grid=form.querySelector('.formGrid');grid?.prepend(wrap);const select=wrap.querySelector('select');rooms.forEach(r=>{const o=new Option(`${r.name} · ${[r.site,r.building,r.floor].filter(Boolean).join(' · ')}`,r.id);select.add(o)});select.addEventListener('change',()=>{roomId=Number(select.value)||0});return true}
+async function loadEntry(){if(!entryId){await chooseRoom();return}if(!roomId){message('Für diesen Eintrag fehlt der Meetingraum.');form.querySelector('button[type="submit"]').disabled=true;return}document.querySelector('#pageTitle').textContent=config.editTitle;const response=await fetch(`/api/rooms/${roomId}`);if(!response.ok)throw Error('Raum konnte nicht geladen werden.');const room=await response.json();const entry=(room[config.collection]||[]).find(item=>item.id===entryId);if(!entry)throw Error('Der Eintrag wurde nicht gefunden.');config.fields.forEach(field=>{const input=form.elements[field.name];if(!input)return;if(field.type==='checkbox')input.checked=Boolean(entry[field.name]);else input.value=entry[field.name]??''})}
+form.addEventListener('submit',async event=>{event.preventDefault();if(!roomId){message('Bitte einen Meetingraum auswählen.');return}const data=Object.fromEntries(config.fields.map(field=>[field.name,valueFor(field)]));const url=entryId?`/api/${config.kind}/${entryId}`:`/api/rooms/${roomId}/${config.kind}`;const response=await fetch(url,{method:entryId?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});if(!response.ok){const error=await response.json().catch(()=>({}));message(error.detail||'Speichern fehlgeschlagen.');return}const saved=await response.json();if(config.kind==='equipment'){for(const [field,kind] of [['offerFile','offer'],['invoiceFile','invoice'],['imageFile','image']]){const file=form.elements[field]?.files?.[0];if(!file)continue;const upload=new FormData();upload.append('file',file);const u=await fetch(`/api/equipment/${saved.id}/documents?kind=${kind}`,{method:'POST',body:upload});if(!u.ok){message('Gerät gespeichert, aber mindestens eine Datei konnte nicht hochgeladen werden.');return}}}location.href=`/static/room-detail.html?id=${roomId}`});
+document.querySelector('#cancel').addEventListener('click',()=>location.href=roomId?`/static/room-detail.html?id=${roomId}`:'/');
+loadEntry().catch(error=>message(error.message));
