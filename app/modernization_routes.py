@@ -1,4 +1,5 @@
 from fastapi import Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from . import main
 
@@ -38,6 +39,10 @@ with main.engine.begin() as connection:
         connection.exec_driver_sql('CREATE INDEX IF NOT EXISTS ix_modernizations_room_id ON modernizations(room_id)')
         connection.exec_driver_sql('PRAGMA foreign_keys=ON')
     main.Modernization.__table__.c.room_id.nullable = True
+
+@app.get('/api/modernizations')
+def list_modernizations(db: Session = Depends(main.db)):
+    return [main.dump(x) for x in db.scalars(select(Modernization).order_by(Modernization.project_year.desc(), Modernization.id.desc())).all()]
 
 @app.get('/api/modernizations/{oid}')
 def get_standalone_modernization(oid: int, db: Session = Depends(main.db)):
