@@ -1,5 +1,4 @@
 from fastapi import Depends, HTTPException
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 from . import main
 
@@ -7,8 +6,6 @@ app = main.app
 Modernization = main.Modernization
 ModernizationIn = main.ModernizationIn
 
-# Existing databases were created with a mandatory room_id. Rebuild that table once
-# so modernization projects can exist independently of a specific room.
 with main.engine.begin() as connection:
     info = list(connection.exec_driver_sql('PRAGMA table_info(modernizations)'))
     room_col = next((row for row in info if row[1] == 'room_id'), None)
@@ -41,6 +38,13 @@ with main.engine.begin() as connection:
         connection.exec_driver_sql('CREATE INDEX IF NOT EXISTS ix_modernizations_room_id ON modernizations(room_id)')
         connection.exec_driver_sql('PRAGMA foreign_keys=ON')
     main.Modernization.__table__.c.room_id.nullable = True
+
+@app.get('/api/modernizations/{oid}')
+def get_standalone_modernization(oid: int, db: Session = Depends(main.db)):
+    obj = db.get(Modernization, oid)
+    if not obj:
+        raise HTTPException(404, 'Modernisierungsprojekt nicht gefunden')
+    return main.dump(obj)
 
 @app.post('/api/modernizations')
 def create_standalone_modernization(payload: dict, db: Session = Depends(main.db)):
