@@ -24,6 +24,17 @@ class EquipmentMetadata(Base):
     __tablename__='equipment_metadata'
     id:Mapped[int]=mapped_column(Integer,primary_key=True); equipment_id:Mapped[int]=mapped_column(ForeignKey('equipment.id',ondelete='CASCADE'),unique=True,index=True); location_type:Mapped[str]=mapped_column(String(50),default='Meetingraum'); location_label:Mapped[str]=mapped_column(String(200),default=''); responsible:Mapped[str]=mapped_column(String(200),default=''); custom_fields:Mapped[str]=mapped_column(Text,default='{}')
 Base.metadata.create_all(main.engine)
+with main.engine.begin() as connection:
+    columns={row[1] for row in connection.exec_driver_sql('PRAGMA table_info(equipment_models)')}
+    migrations=[('manufacturer',"ALTER TABLE equipment_models ADD COLUMN manufacturer VARCHAR(100) DEFAULT ''"),('model_number',"ALTER TABLE equipment_models ADD COLUMN model_number VARCHAR(150) DEFAULT ''"),('category',"ALTER TABLE equipment_models ADD COLUMN category VARCHAR(80) DEFAULT ''"),('size_inches',"ALTER TABLE equipment_models ADD COLUMN size_inches FLOAT"),('mounting',"ALTER TABLE equipment_models ADD COLUMN mounting VARCHAR(100) DEFAULT ''"),('description',"ALTER TABLE equipment_models ADD COLUMN description TEXT DEFAULT ''"),('image_filename',"ALTER TABLE equipment_models ADD COLUMN image_filename VARCHAR(255) DEFAULT ''"),('active',"ALTER TABLE equipment_models ADD COLUMN active BOOLEAN DEFAULT 1"),('field_config',"ALTER TABLE equipment_models ADD COLUMN field_config TEXT DEFAULT '[]'")]
+    for name,sql in migrations:
+        if name not in columns: connection.exec_driver_sql(sql)
+    metadata_cols={row[1] for row in connection.exec_driver_sql('PRAGMA table_info(equipment_metadata)')}
+    if not metadata_cols:
+        pass
+    else:
+        for name,sql in [('location_type',"ALTER TABLE equipment_metadata ADD COLUMN location_type VARCHAR(50) DEFAULT 'Meetingraum'"),('location_label',"ALTER TABLE equipment_metadata ADD COLUMN location_label VARCHAR(200) DEFAULT ''"),('responsible',"ALTER TABLE equipment_metadata ADD COLUMN responsible VARCHAR(200) DEFAULT ''"),('custom_fields',"ALTER TABLE equipment_metadata ADD COLUMN custom_fields TEXT DEFAULT '{}'" )]:
+            if name not in metadata_cols: connection.exec_driver_sql(sql)
 class ModelIn(BaseModel):
     name:str; manufacturer:str=''; model_number:str=''; category:str=''; size_inches:float|None=None; mounting:str=''; description:str=''; active:bool=True; field_config:list[str]=Field(default_factory=list)
 def model_dump(m):
