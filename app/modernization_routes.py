@@ -19,6 +19,13 @@ with main.engine.begin() as connection:
         connection.exec_driver_sql('PRAGMA foreign_keys=ON')
     main.Modernization.__table__.c.room_id.nullable=True
 
+# Backfill one initial history entry for projects created before history tracking existed.
+with main.SessionLocal() as _s:
+    for _p in _s.scalars(select(Modernization)).all():
+        if not _s.scalar(select(main.ModernizationHistory).where(main.ModernizationHistory.modernization_id==_p.id)):
+            _s.add(main.ModernizationHistory(modernization_id=_p.id,status=_p.status,changed_at=main.datetime.now(main.timezone.utc).replace(tzinfo=None).isoformat(timespec='seconds'),note='Historie initialisiert'))
+    _s.commit()
+
 @app.get('/api/modernizations')
 def list_modernizations(db:Session=Depends(main.db)):
     return [main.dump(x) for x in db.scalars(select(Modernization).order_by(Modernization.project_year.desc(),Modernization.id.desc())).all()]
