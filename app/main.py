@@ -1,6 +1,6 @@
 from pathlib import Path
 from uuid import uuid4
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Literal, Optional
 from fastapi import FastAPI, Depends, HTTPException, File, UploadFile
 from fastapi.staticfiles import StaticFiles
@@ -25,7 +25,11 @@ class EquipmentDocument(Base):
 class BookingRule(Base):
     __tablename__='booking_rules'; id:Mapped[int]=mapped_column(primary_key=True); room_id:Mapped[int]=mapped_column(ForeignKey('rooms.id',ondelete='CASCADE'),index=True); entitlement:Mapped[str]=mapped_column(String(100),default='Alle Mitarbeiter'); group_name:Mapped[str]=mapped_column(String(200),default=''); approval_required:Mapped[bool]=mapped_column(Boolean,default=False); approver:Mapped[str]=mapped_column(String(200),default=''); approval_type:Mapped[str]=mapped_column(String(100),default='Keine Genehmigung'); notes:Mapped[str]=mapped_column(Text,default='')
 class Modernization(Base):
-    __tablename__='modernizations'; id:Mapped[int]=mapped_column(primary_key=True); room_id:Mapped[int]=mapped_column(ForeignKey('rooms.id',ondelete='CASCADE'),index=True); project_name:Mapped[str]=mapped_column(String(200)); project_year:Mapped[Optional[int]]=mapped_column(Integer,nullable=True); status:Mapped[str]=mapped_column(String(50),default='Idee'); budget:Mapped[float]=mapped_column(Float,default=0); commissioned:Mapped[float]=mapped_column(Float,default=0); actual_cost:Mapped[float]=mapped_column(Float,default=0); supplier:Mapped[str]=mapped_column(String(200),default=''); responsible:Mapped[str]=mapped_column(String(200),default=''); start_date:Mapped[Optional[date]]=mapped_column(Date,nullable=True); planned_end:Mapped[Optional[date]]=mapped_column(Date,nullable=True); completion_date:Mapped[Optional[date]]=mapped_column(Date,nullable=True); order_number:Mapped[str]=mapped_column(String(100),default=''); notes:Mapped[str]=mapped_column(Text,default='')
+    __tablename__='modernizations'; id:Mapped[int]=mapped_column(primary_key=True); room_id:Mapped[Optional[int]]=mapped_column(ForeignKey('rooms.id',ondelete='CASCADE'),index=True,nullable=True); project_name:Mapped[str]=mapped_column(String(200)); project_year:Mapped[Optional[int]]=mapped_column(Integer,nullable=True); status:Mapped[str]=mapped_column(String(50),default='Idee'); budget:Mapped[float]=mapped_column(Float,default=0); commissioned:Mapped[float]=mapped_column(Float,default=0); actual_cost:Mapped[float]=mapped_column(Float,default=0); supplier:Mapped[str]=mapped_column(String(200),default=''); responsible:Mapped[str]=mapped_column(String(200),default=''); start_date:Mapped[Optional[date]]=mapped_column(Date,nullable=True); planned_end:Mapped[Optional[date]]=mapped_column(Date,nullable=True); completion_date:Mapped[Optional[date]]=mapped_column(Date,nullable=True); order_number:Mapped[str]=mapped_column(String(100),default=''); notes:Mapped[str]=mapped_column(Text,default='')
+class ModernizationHistory(Base):
+    __tablename__='modernization_history'; id:Mapped[int]=mapped_column(primary_key=True); modernization_id:Mapped[int]=mapped_column(ForeignKey('modernizations.id',ondelete='CASCADE'),index=True); status:Mapped[str]=mapped_column(String(50)); changed_at:Mapped[str]=mapped_column(String(40)); note:Mapped[str]=mapped_column(Text,default='')
+class ModernizationDocument(Base):
+    __tablename__='modernization_documents'; id:Mapped[int]=mapped_column(primary_key=True); modernization_id:Mapped[int]=mapped_column(ForeignKey('modernizations.id',ondelete='CASCADE'),index=True); kind:Mapped[str]=mapped_column(String(20)); filename:Mapped[str]=mapped_column(String(255)); stored_name:Mapped[str]=mapped_column(String(255)); uploaded_at:Mapped[str]=mapped_column(String(40))
 class Ticket(Base):
     __tablename__='tickets'; id:Mapped[int]=mapped_column(primary_key=True); room_id:Mapped[int]=mapped_column(ForeignKey('rooms.id',ondelete='CASCADE'),index=True); ticket_number:Mapped[str]=mapped_column(String(100)); subject:Mapped[str]=mapped_column(String(250)); category:Mapped[str]=mapped_column(String(80),default='Sonstiges'); status:Mapped[str]=mapped_column(String(50),default='Offen'); priority:Mapped[str]=mapped_column(String(50),default='Normal'); created_at:Mapped[Optional[date]]=mapped_column(Date,nullable=True); resolved_at:Mapped[Optional[date]]=mapped_column(Date,nullable=True); responsible:Mapped[str]=mapped_column(String(200),default=''); description:Mapped[str]=mapped_column(Text,default=''); notes:Mapped[str]=mapped_column(Text,default='')
 class BudgetSettings(Base):
@@ -65,7 +69,7 @@ def room_detail(room_id:int,db:Session=Depends(db)):
     r=db.get(Room,room_id)
     if not r: raise HTTPException(404,'Raum nicht gefunden')
     data=dump(r); data['image_url']=room_image_url(r); data['area']=round((r.length or 0)*(r.width or 0),2) if r.length and r.width else None
-    data['equipment']=[dict(dump(x),documents=[dict(dump(doc),url=f'/uploads/{x.id}/{doc.stored_name}') for doc in x.documents]) for x in r.equipment]; data['rules']=[dump(x) for x in r.rules]; data['modernizations']=[dump(x) for x in r.projects]; data['tickets']=[dump(x) for x in sorted(r.tickets,key=lambda x:x.id,reverse=True)]
+    data['equipment']=[dict(dump(x),documents=[dict(dump(doc),url=f'/uploads/{x.id}/{doc.stored_name}') for doc in x.documents]) for x in r.equipment]; data['rules']=[dump(x) for x in r.rules]; data['modernizations']=[dict(dump(x),history=[dump(h) for h in db.scalars(select(ModernizationHistory).where(ModernizationHistory.modernization_id==x.id).order_by(ModernizationHistory.id)).all()],documents=[dict(dump(doc),url=f'/uploads/modernizations/{x.id}/{doc.stored_name}') for doc in db.scalars(select(ModernizationDocument).where(ModernizationDocument.modernization_id==x.id).order_by(ModernizationDocument.id.desc())).all()]) for x in r.projects]; data['tickets']=[dump(x) for x in sorted(r.tickets,key=lambda x:x.id,reverse=True)]
     dates=[item.completion_date or item.planned_end or item.start_date or date(item.project_year,12,31) for item in r.projects if item.completion_date or item.planned_end or item.start_date or item.project_year]+[item.purchase_date for item in r.equipment if item.purchase_date]; data['last_modernization']=max(dates,default=None).isoformat() if dates else None; data['host_name']=next((item.host_name for item in r.equipment if item.category=='VC-System' and item.host_name),''); return data
 
 def project_year(p): return p.project_year or (p.start_date.year if p.start_date else None)
@@ -154,20 +158,38 @@ async def upload_equipment_document(equipment_id:int,kind:str,file:UploadFile=Fi
     filename=Path(file.filename or '').name
     if not filename: raise HTTPException(400,'Datei fehlt')
     directory=UPLOADS/str(equipment_id); directory.mkdir(parents=True,exist_ok=True); stored_name=f'{uuid4().hex}_{filename}'; (directory/stored_name).write_bytes(await file.read()); document=EquipmentDocument(equipment_id=equipment_id,kind=kind,filename=filename,stored_name=stored_name); db.add(document); db.commit(); db.refresh(document); return dict(dump(document),url=f'/uploads/{equipment_id}/{stored_name}')
+@app.post('/api/modernizations/{modernization_id}/documents')
+async def upload_modernization_document(modernization_id:int,kind:str,file:UploadFile=File(...),db:Session=Depends(db)):
+    if kind not in ['offer','invoice']: raise HTTPException(400,'Ungültiger Dokumenttyp')
+    project=db.get(Modernization,modernization_id)
+    if not project: raise HTTPException(404,'Modernisierungsprojekt nicht gefunden')
+    filename=Path(file.filename or '').name
+    if not filename: raise HTTPException(400,'Datei fehlt')
+    directory=UPLOADS/'modernizations'/str(modernization_id); directory.mkdir(parents=True,exist_ok=True)
+    stored_name=f'{uuid4().hex}_{filename}'; (directory/stored_name).write_bytes(await file.read())
+    document=ModernizationDocument(modernization_id=modernization_id,kind=kind,filename=filename,stored_name=stored_name,uploaded_at=datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec='seconds'))
+    db.add(document); db.commit(); db.refresh(document); return dict(dump(document),url=f'/uploads/modernizations/{modernization_id}/{stored_name}')
+
 @app.post('/api/rooms/{rid}/{kind}')
 def create_child(rid:int,kind:str,payload:dict,db:Session=Depends(db)):
     r=db.get(Room,rid)
     if not r: raise HTTPException(404,'Raum nicht gefunden')
     if kind not in ['equipment','rules','modernizations','tickets']: raise HTTPException(400,'Ungültiger Bereich')
-    cls=model_for(kind); data=schema_for(kind)(**payload).model_dump(); data['room_id']=rid; obj=cls(**data); db.add(obj); db.commit(); db.refresh(obj); return dump(obj)
+    cls=model_for(kind); data=schema_for(kind)(**payload).model_dump(); data['room_id']=rid; obj=cls(**data); db.add(obj); db.flush()
+    if kind=='modernizations':
+        db.add(ModernizationHistory(modernization_id=obj.id,status=obj.status,changed_at=datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec='seconds'),note='Projekt angelegt'))
+    db.commit(); db.refresh(obj); return dump(obj)
 @app.put('/api/{kind}/{oid}')
 def update_child(kind:str,oid:int,payload:dict,db:Session=Depends(db)):
     if kind not in ['equipment','rules','modernizations','tickets']: raise HTTPException(400,'Ungültiger Bereich')
     obj=db.get(model_for(kind),oid)
     if not obj: raise HTTPException(404,'Eintrag nicht gefunden')
     data=schema_for(kind)(**payload).model_dump()
+    previous_status=getattr(obj,'status',None)
     for k,v in data.items():
         if hasattr(obj,k) and k not in ['id','room_id']: setattr(obj,k,v)
+    if kind=='modernizations' and data.get('status') and data.get('status')!=previous_status:
+        db.add(ModernizationHistory(modernization_id=obj.id,status=data['status'],changed_at=datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec='seconds'),note='Status geändert'))
     db.commit(); db.refresh(obj); return dump(obj)
 @app.delete('/api/{kind}/{oid}')
 def delete_child(kind:str,oid:int,db:Session=Depends(db)):
