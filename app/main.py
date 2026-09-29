@@ -177,7 +177,7 @@ def create_child(rid:int,kind:str,payload:dict,db:Session=Depends(db)):
     if kind not in ['equipment','rules','modernizations','tickets']: raise HTTPException(400,'Ungültiger Bereich')
     cls=model_for(kind); data=schema_for(kind)(**payload).model_dump(); data['room_id']=rid; obj=cls(**data); db.add(obj); db.flush()
     if kind=='modernizations':
-        db.add(ModernizationHistory(modernization_id=obj.id,status=obj.status,changed_at=datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec='seconds'),note='Projekt angelegt'))
+        db.add(ModernizationHistory(modernization_id=obj.id,status=obj.status,changed_at=modernization_history_time(obj,data),note='Projekt angelegt'))
     db.commit(); db.refresh(obj); return dump(obj)
 def modernization_history_time(obj, data, previous_values=None):
     # Use a project date for history whenever one was newly entered/changed.
