@@ -185,6 +185,9 @@ def modernization_history_time(obj, data, previous_values=None):
     previous_values=previous_values or {}
     for field in ['start_date','planned_end','completion_date']:
         value=data.get(field)
+        if isinstance(value,str) and value:
+            try: value=date.fromisoformat(value)
+            except ValueError: value=None
         if value is not None and value != previous_values.get(field):
             return datetime.combine(value, datetime.min.time()).isoformat(timespec='seconds')
     return datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec='seconds')
