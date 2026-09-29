@@ -43,7 +43,7 @@ def create_standalone_modernization(payload:dict,db:Session=Depends(main.db)):
     if not str(data.get('project_name') or '').strip():raise HTTPException(422,'Projektname ist erforderlich')
     obj=Modernization(room_id=None,project_name=str(data['project_name']).strip(),project_year=data['project_year'],status=data.get('status') or 'Idee',budget=float(data.get('budget') or 0),commissioned=float(data.get('commissioned') or 0),actual_cost=float(data.get('actual_cost') or 0),supplier=data.get('supplier') or '',responsible=data.get('responsible') or '',start_date=data.get('start_date') or None,planned_end=data.get('planned_end') or None,completion_date=data.get('completion_date') or None,order_number=data.get('order_number') or '',notes=data.get('notes') or '')
     db.add(obj);db.flush()
-    db.add(main.ModernizationHistory(modernization_id=obj.id,status=obj.status,changed_at=main.datetime.now(main.timezone.utc).replace(tzinfo=None).isoformat(timespec='seconds'),note='Projekt angelegt'))
+    db.add(main.ModernizationHistory(modernization_id=obj.id,status=obj.status,changed_at=main.modernization_history_time(obj, data),note='Projekt angelegt'))
     db.commit();db.refresh(obj);return main.dump(obj)
 
 
