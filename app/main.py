@@ -179,17 +179,37 @@ def create_child(rid:int,kind:str,payload:dict,db:Session=Depends(db)):
     if kind=='modernizations':
         db.add(ModernizationHistory(modernization_id=obj.id,status=obj.status,changed_at=datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec='seconds'),note='Projekt angelegt'))
     db.commit(); db.refresh(obj); return dump(obj)
+def modernization_history_time(obj, data, previous_values=None):
+    # Use a project date for history whenever one was newly entered/changed.
+    # This keeps later data entry from looking like a new event today.
+    previous_values=previous_values or {}
+    for field in ['start_date','planned_end','completion_date']:
+        value=data.get(field)
+        if value is not None and value != previous_values.get(field):
+            return datetime.combine(value, datetime.min.time()).isoformat(timespec='seconds')
+    return datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec='seconds')
+
 @app.put('/api/{kind}/{oid}')
 def update_child(kind:str,oid:int,payload:dict,db:Session=Depends(db)):
     if kind not in ['equipment','rules','modernizations','tickets']: raise HTTPException(400,'Ungültiger Bereich')
     obj=db.get(model_for(kind),oid)
     if not obj: raise HTTPException(404,'Eintrag nicht gefunden')
-    data=schema_for(kind)(**payload).model_dump()
     previous_status=getattr(obj,'status',None)
+    previous_values={k:getattr(obj,k,None) for k in ['start_date','planned_end','completion_date']} if kind=='modernizations' else {}
+    data=schema_for(kind)(**payload).model_dump()
+    requested_room_id=payload.get('room_id') if kind=='modernizations' else None
+    if kind=='modernizations' and requested_room_id is not None:
+        if requested_room_id:
+            room=db.get(Room,int(requested_room_id))
+            if not room: raise HTTPException(404,'Raum nicht gefunden')
+            obj.room_id=room.id
+        else:
+            obj.room_id=None
     for k,v in data.items():
         if hasattr(obj,k) and k not in ['id','room_id']: setattr(obj,k,v)
     if kind=='modernizations' and data.get('status') and data.get('status')!=previous_status:
-        db.add(ModernizationHistory(modernization_id=obj.id,status=data['status'],changed_at=datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec='seconds'),note='Status geändert'))
+        changed_at=modernization_history_time(obj,data,previous_values)
+        db.add(ModernizationHistory(modernization_id=obj.id,status=data['status'],changed_at=changed_at,note='Status geändert'))
     db.commit(); db.refresh(obj); return dump(obj)
 @app.delete('/api/{kind}/{oid}')
 def delete_child(kind:str,oid:int,db:Session=Depends(db)):
