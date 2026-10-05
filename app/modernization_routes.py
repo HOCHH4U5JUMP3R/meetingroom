@@ -9,7 +9,12 @@ Modernization=main.Modernization
 with main.engine.begin() as connection:
     info=list(connection.exec_driver_sql('PRAGMA table_info(modernizations)'))
     room_col=next((row for row in info if row[1]=='room_id'),None)
-    if room_col is not None and room_col[3]==1:
+    year_col=next((row for row in info if row[1]=='project_year'),None)
+    # Older databases were created with room_id/project_year as NOT NULL.
+    # Modernization projects are intentionally allowed to be standalone and
+    # may omit the year, so migrate either legacy constraint before inserts.
+    needs_nullable_migration=(room_col is not None and room_col[3]==1) or (year_col is not None and year_col[3]==1)
+    if needs_nullable_migration:
         connection.exec_driver_sql('PRAGMA foreign_keys=OFF')
         connection.exec_driver_sql('ALTER TABLE modernizations RENAME TO modernizations_old')
         connection.exec_driver_sql('''CREATE TABLE modernizations (id INTEGER NOT NULL PRIMARY KEY,room_id INTEGER,project_name VARCHAR(200) NOT NULL,project_year INTEGER,status VARCHAR(50) DEFAULT 'Idee',budget FLOAT DEFAULT 0,commissioned FLOAT DEFAULT 0,actual_cost FLOAT DEFAULT 0,supplier VARCHAR(200) DEFAULT '',responsible VARCHAR(200) DEFAULT '',start_date DATE,planned_end DATE,completion_date DATE,order_number VARCHAR(100) DEFAULT '',notes TEXT DEFAULT '',FOREIGN KEY(room_id) REFERENCES rooms(id) ON DELETE CASCADE)''')
