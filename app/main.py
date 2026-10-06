@@ -122,7 +122,20 @@ def dashboard(db:Session=Depends(db)):
 class RoomIn(BaseModel): name:str; site:str=''; building:str=''; floor:str=''; room_number:str=''; length:Optional[float]=None; width:Optional[float]=None; height:Optional[float]=None; seats:Optional[int]=None; specialty:str=''; category:str=''; outlook_resource:str=''; connections:str=''; owner:str=''; host_name:str=''; notes:str=''; status:str='Aktiv'; last_modernization:Optional[date]=None
 class EquipmentIn(BaseModel): name:str; category:Literal['Monitor','VC-System','Mikrofon','Lautsprecher','Zubehör']='Monitor'; manufacturer:str=''; model:str=''; serial:str=''; size_inches:Optional[float]=None; mounting:str=''; status:str='Aktiv'; purchase_date:Optional[date]=None; purchase_price:float=0; host_name:str=''; inventory_number:str=''; mac_address:str=''; notes:str=''
 class RuleIn(BaseModel): entitlement:str='Alle Mitarbeiter'; group_name:str=''; approval_required:bool=False; approver:str=''; approval_type:str='Keine Genehmigung'; notes:str=''
-class ModernizationIn(BaseModel): project_name:str; project_year:Optional[int]=None; status:str='Idee'; budget:float=0; commissioned:float=0; actual_cost:float=0; supplier:str=''; responsible:str=''; start_date:Optional[date]=None; planned_end:Optional[date]=None; completion_date:Optional[date]=None; order_number:str=''; notes:str=''
+class ModernizationIn(BaseModel):
+    project_name:str
+    project_year:Optional[int]=None
+    status:str='Idee'
+    budget:Optional[float]=0
+    commissioned:Optional[float]=0
+    actual_cost:Optional[float]=0
+    supplier:str=''
+    responsible:str=''
+    start_date:Optional[date]=None
+    planned_end:Optional[date]=None
+    completion_date:Optional[date]=None
+    order_number:str=''
+    notes:str=''
 class TicketIn(BaseModel): ticket_number:str; subject:str; category:str='Sonstiges'; status:str='Offen'; priority:str='Normal'; created_at:Optional[date]=None; resolved_at:Optional[date]=None; responsible:str=''; description:str=''; notes:str=''
 @app.post('/api/rooms')
 def create_room(x:RoomIn,db:Session=Depends(db)):
@@ -175,7 +188,11 @@ def create_child(rid:int,kind:str,payload:dict,db:Session=Depends(db)):
     r=db.get(Room,rid)
     if not r: raise HTTPException(404,'Raum nicht gefunden')
     if kind not in ['equipment','rules','modernizations','tickets']: raise HTTPException(400,'Ungültiger Bereich')
-    cls=model_for(kind); data=schema_for(kind)(**payload).model_dump(); data['room_id']=rid; obj=cls(**data); db.add(obj); db.flush()
+    cls=model_for(kind); data=schema_for(kind)(**payload).model_dump()
+    if kind=='modernizations':
+        for field in ['budget','commissioned','actual_cost']:
+            if data.get(field) is None: data[field]=0
+    data['room_id']=rid; obj=cls(**data); db.add(obj); db.flush()
     if kind=='modernizations':
         db.add(ModernizationHistory(modernization_id=obj.id,status=obj.status,changed_at=modernization_history_time(obj,data),note='Projekt angelegt'))
     db.commit(); db.refresh(obj); return dump(obj)
