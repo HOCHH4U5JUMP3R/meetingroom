@@ -57,13 +57,18 @@ def dump(obj): return {c.name:getattr(obj,c.name) for c in obj.__table__.columns
 def room_image_url(room): return f'/uploads/rooms/{room.id}/{room.image_filename}' if room.image_filename else None
 def model_for(kind): return {'rooms':Room,'equipment':Equipment,'rules':BookingRule,'modernizations':Modernization,'tickets':Ticket}[kind]
 def schema_for(kind): return {'equipment':EquipmentIn,'rules':RuleIn,'modernizations':ModernizationIn,'tickets':TicketIn}[kind]
+
+TICKET_CLOSED_STATUSES={'gelöst','geloest','erledigt','abgeschlossen','geschlossen','closed','resolved','done','fertig'}
+def ticket_is_open(ticket):
+    status=' '.join(str(ticket.status or '').strip().casefold().split())
+    return bool(status) and status not in TICKET_CLOSED_STATUSES
 @app.get('/')
 def index(): return FileResponse(BASE/'app'/'static'/'index.html')
 @app.get('/health')
 def health(): return {'status':'ok'}
 @app.get('/api/rooms')
 def rooms(db:Session=Depends(db)):
-    return [dict(dump(x),image_url=room_image_url(x),ticket_count=len(x.tickets),open_ticket_count=sum(t.status in ['Offen','In Bearbeitung'] for t in x.tickets)) for x in db.scalars(select(Room).order_by(Room.site,Room.building,Room.floor,Room.name)).all()]
+    return [dict(dump(x),image_url=room_image_url(x),ticket_count=len(x.tickets),open_ticket_count=sum(ticket_is_open(t) for t in x.tickets)) for x in db.scalars(select(Room).order_by(Room.site,Room.building,Room.floor,Room.name)).all()]
 @app.get('/api/rooms/{room_id}')
 def room_detail(room_id:int,db:Session=Depends(db)):
     r=db.get(Room,room_id)
@@ -118,7 +123,7 @@ def update_site_budget(site:str,payload:BudgetAmountIn,year:int,db:Session=Depen
     e=db.scalar(select(YearlyBudget).where(YearlyBudget.year==year,YearlyBudget.site==site)); e=e or YearlyBudget(year=year,site=site); e.budget=payload.budget; db.add(e); db.commit(); return {'site':site,'year':year,'budget':e.budget}
 @app.get('/api/dashboard')
 def dashboard(db:Session=Depends(db)):
-    rows=db.scalars(select(Modernization)).all(); return {'rooms':db.scalar(select(func.count(Room.id))) or 0,'open_tickets':db.scalar(select(func.count(Ticket.id)).where(Ticket.status.in_(['Offen','In Bearbeitung']))) or 0,'budget':sum(x.budget or 0 for x in rows),'commissioned':sum(x.commissioned or 0 for x in rows),'actual':sum(x.actual_cost or 0 for x in rows),'available':sum((x.budget or 0)-(x.commissioned or 0) for x in rows)}
+    rows=db.scalars(select(Modernization)).all(); return {'rooms':db.scalar(select(func.count(Room.id))) or 0,'open_tickets':sum(ticket_is_open(t) for t in db.scalars(select(Ticket)).all()),'budget':sum(x.budget or 0 for x in rows),'commissioned':sum(x.commissioned or 0 for x in rows),'actual':sum(x.actual_cost or 0 for x in rows),'available':sum((x.budget or 0)-(x.commissioned or 0) for x in rows)}
 class RoomIn(BaseModel): name:str; site:str=''; building:str=''; floor:str=''; room_number:str=''; length:Optional[float]=None; width:Optional[float]=None; height:Optional[float]=None; seats:Optional[int]=None; specialty:str=''; category:str=''; outlook_resource:str=''; connections:str=''; owner:str=''; host_name:str=''; notes:str=''; status:str='Aktiv'; last_modernization:Optional[date]=None
 class EquipmentIn(BaseModel): name:str; category:Literal['Monitor','VC-System','Mikrofon','Lautsprecher','Zubehör']='Monitor'; manufacturer:str=''; model:str=''; serial:str=''; size_inches:Optional[float]=None; mounting:str=''; status:str='Aktiv'; purchase_date:Optional[date]=None; purchase_price:float=0; host_name:str=''; inventory_number:str=''; mac_address:str=''; notes:str=''
 class RuleIn(BaseModel): entitlement:str='Alle Mitarbeiter'; group_name:str=''; approval_required:bool=False; approver:str=''; approval_type:str='Keine Genehmigung'; notes:str=''
